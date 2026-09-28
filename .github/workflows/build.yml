@@ -1,0 +1,114 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - master
+      - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (for example 5.0.1)'
+        required: true
+
+jobs:
+  version:
+    name: Find version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.extract.outputs.version }}
+    steps:
+      - name: Extract version number
+        id: extract
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          VERSION="$INPUT_VERSION"
+          if [ -z "$VERSION" ]; then
+            VERSION=$(echo "$COMMIT_MESSAGE" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)
+          fi
+          if [ -z "$VERSION" ]; then
+            echo "No version number in the commit message. Skipping build."
+          else
+            echo "Building version $VERSION"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: version
+    if: needs.version.outputs.version != ''
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            flag: --win
+            artifact: jam-windows
+          - name: macOS
+            os: macos-14
+            flag: --mac
+            artifact: jam-macos
+          - name: Linux
+            os: ubuntu-latest
+            flag: --linux
+            artifact: jam-linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.11.0'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Set version in package.json
+        shell: bash
+        run: npm version "${{ needs.version.outputs.version }}" --no-git-tag-version --allow-same-version
+
+      - name: Build app
+        run: npx electron-builder build ${{ matrix.flag }} --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Upload build files
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          if-no-files-found: error
+          path: |
+            build/*.exe
+            build/*.dmg
+            build/*.AppImage
+            build/*.deb
+            build/*.blockmap
+            build/latest*.yml
+
+  release:
+    name: Publish release
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download build files
+        uses: actions/download-artifact@v4
+        with:
+          path: build
+          merge-multiple: true
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.version.outputs.version }}
+          name: Release ${{ needs.version.outputs.version }}
+          draft: false
+          prerelease: false
+          files: build/*

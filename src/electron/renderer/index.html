@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jam</title>
+
+  <!-- jQuery -->
+  <script>
+    window.jQuery = window.$ = require('jquery')
+  </script>
+</head>
+
+<body class="bg-primary-bg text-sidebar-text h-screen flex font-sans">
+  <!-- Sidebar -->
+  <div id="sidebar"
+    class="w-64 h-full bg-sidebar-bg p-4 fixed top-0 left-0 transform -translate-x-full transition-transform duration-300 border-r border-sidebar-border z-30 flex flex-col shadow-lg">
+
+    <div class="mb-8 flex items-center justify-center">
+      <div class="p-2 rounded-full bg-tertiary-bg/50 border border-sidebar-border/30 shadow-lg">
+        <img src="file:///../../../../assets/icon.png" alt="Jam Icon" class="h-12 w-12 transition-transform hover:scale-110">
+      </div>
+    </div>
+
+    <!-- Main Navigation -->
+    <div class="px-3 py-4">
+      <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 px-3">Navigation</h2>
+
+      <ul class="space-y-1">
+        <li>
+          <a href="#"
+            class="flex items-center space-x-3 text-sidebar-text hover:bg-tertiary-bg group px-3 py-2.5 rounded-md transition-all"
+            onclick="jam.application.openAnimalJam()">
+            <div
+              class="w-8 h-8 flex items-center justify-center bg-tertiary-bg/50 rounded-md group-hover:bg-highlight-green/10 transition-colors">
+              <i class="fas fa-play text-highlight-green"></i>
+            </div>
+            <span class="font-medium">Play</span>
+            <div class="ml-auto opacity-0 group-hover:opacity-100 transition-opacity">
+            </div>
+          </a>
+        </li>
+
+        <!-- Settings -->
+        <li>
+          <a href="#"
+            class="flex items-center space-x-3 text-sidebar-text hover:bg-tertiary-bg group px-3 py-2.5 rounded-md transition-all"
+            onclick="jam.application.openSettings()">
+            <div
+              class="w-8 h-8 flex items-center justify-center bg-tertiary-bg/50 rounded-md group-hover:bg-amber-400/10 transition-colors">
+              <i class="fas fa-cog text-amber-400"></i>
+            </div>
+            <span class="font-medium">Settings</span>
+          </a>
+        </li>
+
+        <li class="relative">
+          <button id="linksDropdownToggle"
+            class="w-full flex items-center justify-between space-x-3 text-sidebar-text hover:bg-tertiary-bg group px-3 py-2.5 rounded-md transition-all">
+            <div class="flex items-center space-x-3">
+              <div
+                class="w-8 h-8 flex items-center justify-center bg-tertiary-bg/50 rounded-md group-hover:bg-text-primary/10 transition-colors">
+                <i class="fas fa-link text-text-primary"></i>
+              </div>
+              <span class="font-medium">Links</span>
+            </div>
+            <i class="fas fa-chevron-down text-xs transition-transform duration-300" id="linksDropdownIcon"></i>
+          </button>
+          <div id="linksDropdown"
+            class="hidden absolute z-10 left-0 right-0 mt-1 bg-sidebar-bg border border-sidebar-border/30 rounded-md shadow-lg overflow-hidden transition-all duration-300 ease-in-out">
+            <a href="#"
+              class="flex items-center space-x-3 text-sidebar-text hover:bg-tertiary-bg group py-2 px-3 rounded-md transition-all"
+              onclick="jam.application.open('https://discord.gg/HzFe7XpuPs')">
+              <i class="fab fa-discord text-indigo-400 w-5 text-center"></i>
+              <span>Discord</span>
+              <i class="fas fa-external-link-alt ml-auto text-xs opacity-0 group-hover:opacity-60"></i>
+            </a>
+            <a href="#"
+              class="flex items-center space-x-3 text-sidebar-text hover:bg-tertiary-bg group py-2 px-3 rounded-md transition-all"
+              onclick="jam.application.open('https://github.com/sxip/jam')">
+              <i class="fab fa-github text-text-primary w-5 text-center"></i>
+              <span>GitHub</span>
+              <i class="fas fa-external-link-alt ml-auto text-xs opacity-0 group-hover:opacity-60"></i>
+            </a>
+            <a href="#"
+              class="flex items-center space-x-3 text-sidebar-text hover:bg-tertiary-bg group py-2 px-3 rounded-md transition-all"
+              onclick="jam.application.open('https://jam.exposed')">
+              <i class="fas fa-palette text-peachy-beige w-5 text-center"></i>
+              <span>Masterpieces</span>
+              <i class="fas fa-external-link-alt ml-auto text-xs opacity-0 group-hover:opacity-60"></i>
+            </a>
+          </div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Plugins Section -->
+    <div class="flex-1 overflow-hidden flex flex-col min-h-0 px-3 pt-4 mt-2">
+      <div class="flex items-center justify-between px-3 mb-4">
+        <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center">
+          <span>Plugins</span>
+          <div class="ml-2 flex-grow h-px bg-sidebar-border/20"></div>
+        </h2>
+
+        <!-- Group the buttons together -->
+        <div class="flex items-center space-x-1">
+          <button class="text-sidebar-text hover:text-blue-400 p-1.5 hover:bg-tertiary-bg/70 rounded transition-all"
+            onclick="jam.dispatch.refresh()" data-tooltip="Reload Plugins">
+            <i class="fas fa-sync-alt"></i>
+          </button>
+
+          <button
+            class="text-sidebar-text hover:text-highlight-green p-1.5 hover:bg-tertiary-bg/70 rounded transition-all"
+            onclick="jam.application.openPluginHub()" data-tooltip="Add plugins">
+            <i class="fas fa-puzzle-piece"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex-1 overflow-y-auto custom-scrollbar pr-1">
+        <ul id="pluginList" class="space-y-2.5">
+          <!-- Plugins -->
+        </ul>
+
+        <div id="emptyPluginMessage" class="hidden text-center py-4 text-gray-400">
+          <i class="fas fa-puzzle-piece mb-2 text-lg opacity-50"></i>
+          <p class="text-xs">No plugins installed</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-4 pt-3 border-t border-sidebar-border/30 text-xs text-gray-500 text-center">
+      Made with ❤️ by Sxip
+    </div>
+
+    <div class="mt-2 text-xs text-center">
+      <a href="#" onclick="jam.application.open('https://ko-fi.com/sxips')" class="text-[#FF5E5B] hover:underline flex items-center justify-center space-x-1 transition-colors">
+        <i class="fas fa-mug-hot"></i>
+        <span>Support on Ko-fi</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div id="mainContent" class="flex-1 ml-0 transition-margin duration-300 flex flex-col bg-primary-bg">
+
+    <!-- Header -->
+    <header id="header" class="flex items-center p-4 bg-secondary-bg border-b border-sidebar-border shadow">
+      <button id="menuButton" class="text-lg text-sidebar-text focus:outline-none">
+        <i id="menuIcon" class="fas fa-bars"></i>
+      </button>
+
+      <div class="flex items-center mx-auto space-x-2">
+      </div>
+
+      <button id="closeButton"
+        class="w-7 h-7 flex items-center justify-center rounded-full hover:bg-error-red hover:text-white transition-all duration-200 text-sidebar-text focus:outline-none"
+        onclick="jam.application.close()">
+        <i class="fas fa-times text-sm"></i>
+      </button>
+    </header>
+
+    <!-- Tab Navigation -->
+    <div class="tabs w-full border-b border-sidebar-border bg-tertiary-bg shadow-sm">
+      <div class="flex items-center justify-center">
+        <button id="consoleTab"
+          class="tab-button active text-sidebar-text py-2.5 px-6 text-sm font-medium transition-all relative"
+          data-tab="console">
+          <i class="fas fa-terminal mr-2.5 text-xs"></i>Console
+          <span
+            class="active-indicator absolute bottom-0 left-0 right-0 h-0.5 bg-highlight-green transform scale-x-0 transition-transform"></span>
+        </button>
+        <button id="packetLoggingTab"
+          class="tab-button text-sidebar-text py-2.5 px-6 text-sm font-medium transition-all relative"
+          data-tab="packet-logging">
+          <i class="fas fa-network-wired mr-2.5 text-xs"></i>Network
+          <span
+            class="active-indicator absolute bottom-0 left-0 right-0 h-0.5 bg-highlight-yellow transform scale-x-0 transition-transform"></span>
+        </button>
+        <button id="httpLoggingTab"
+          class="tab-button text-sidebar-text py-2.5 px-6 text-sm font-medium transition-all relative"
+          data-tab="http-logging">
+          <i class="fas fa-globe mr-2.5 text-xs"></i>HTTP
+          <span
+            class="active-indicator absolute bottom-0 left-0 right-0 h-0.5 bg-custom-pink transform scale-x-0 transition-transform"></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Tab Content -->
+    <div id="console" class="tab-content flex-1 p-4 overflow-auto">
+      <div id="messages" class="flex flex-col overflow-x-auto"></div>
+    </div>
+
+    <div id="modalContainer" class="fixed inset-0 z-50 hidden overflow-y-auto">
+      <!-- Modal content will be dynamically rendered -->
+    </div>
+
+    <div id="packet-logging" class="tab-content flex-1 hidden w-full flex flex-col">
+      <div class="bg-secondary-bg p-2 border-b border-sidebar-border">
+        <!-- Counter Row -->
+        <div class="flex justify-between items-center mb-2">
+          <div class="flex items-center space-x-3">
+            <span class="text-text-primary text-xs">
+              <i class="fas fa-arrow-down text-highlight-green mr-1"></i>
+              <span id="incomingCount">0</span> In
+            </span>
+            <span class="text-text-primary text-xs">
+              <i class="fas fa-arrow-up text-highlight-yellow mr-1"></i>
+              <span id="outgoingCount">0</span> Out
+            </span>
+            <span class="text-text-primary text-xs">
+              <i class="fas fa-list mr-1"></i>
+              <span id="totalCount">0</span> Total
+            </span>
+          </div>
+
+          <div class="flex space-x-2">
+            <!-- Clear Logs Button -->
+            <button id="clearLogsButton"
+              class="bg-error-red text-white px-2 py-1 rounded text-xs hover:bg-error-red/90 transition">
+              <i class="fas fa-trash mr-1"></i> Clear
+            </button>
+
+            <!-- Export Button -->
+            <button id="exportLogsButton"
+              class="bg-highlight-green text-white px-2 py-1 rounded text-xs hover:bg-highlight-green/90 transition">
+              <i class="fas fa-file-export"></i> Export
+            </button>
+          </div>
+        </div>
+
+        <!-- Filter Controls -->
+        <div class="flex space-x-1">
+          <button id="filterAllButton"
+            class="bg-tertiary-bg text-text-primary px-2 py-1 rounded text-xs hover:bg-sidebar-hover transition active min-w-[40px]">
+            All
+          </button>
+          <button id="filterIncomingButton"
+            class="bg-tertiary-bg text-text-primary px-2 py-1 rounded text-xs hover:bg-sidebar-hover transition min-w-[40px]">
+            Incoming
+          </button>
+          <button id="filterOutgoingButton"
+            class="bg-tertiary-bg text-text-primary px-2 py-1 rounded text-xs hover:bg-sidebar-hover transition min-w-[40px]">
+            Outgoing
+          </button>
+        </div>
+      </div>
+
+      <div id="message-log" class="flex flex-col p-4 overflow-y-auto flex-grow"></div>
+    </div>
+
+    <div id="http-logging" class="tab-content flex-1 hidden w-full flex flex-col">
+      <div class="bg-secondary-bg p-2 border-b border-sidebar-border">
+        <div class="flex justify-between items-center mb-2">
+          <div class="flex items-center space-x-3">
+            <span class="text-text-primary text-xs">
+              <i class="fas fa-arrow-down text-custom-pink mr-1"></i>
+              <span id="httpIncomingCount">0</span> In
+            </span>
+            <span class="text-text-primary text-xs">
+              <i class="fas fa-arrow-up text-custom-pink mr-1"></i>
+              <span id="httpOutgoingCount">0</span> Out
+            </span>
+            <span class="text-text-primary text-xs">
+              <i class="fas fa-list mr-1"></i>
+              <span id="httpTotalCount">0</span> Total
+            </span>
+          </div>
+
+          <div class="flex space-x-2">
+            <button id="clearHttpLogsButton"
+              class="bg-error-red text-white px-2 py-1 rounded text-xs hover:bg-error-red/90 transition">
+              <i class="fas fa-trash mr-1"></i> Clear
+            </button>
+
+            <button id="exportHttpLogsButton"
+              class="bg-highlight-green text-white px-2 py-1 rounded text-xs hover:bg-highlight-green/90 transition">
+              <i class="fas fa-file-export"></i> Export
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex-1 overflow-auto relative" style="max-height: 420px;">
+        <table id="http-table" class="w-full text-sm text-left">
+          <thead class="sticky top-0 z-10 text-xs uppercase text-gray-400 select-none bg-tertiary-bg text-gray-400">
+            <tr>
+              <th class="px-2 py-2 w-8 border-b border-sidebar-border">#</th>
+              <th class="px-2 py-2 w-8 border-b border-sidebar-border"><i class="fas fa-exchange-alt"></i></th>
+              <th class="px-2 py-2 border-b border-sidebar-border">Path</th>
+              <th class="px-2 py-2 w-16 border-b border-sidebar-border">Status</th>
+              <th class="px-2 py-2 w-16 border-b border-sidebar-border">Type</th>
+              <th class="px-2 py-2 w-20 border-b border-sidebar-border">Size</th>
+              <th class="px-2 py-2 w-20 border-b border-sidebar-border">Time</th>
+            </tr>
+          </thead>
+          <tbody id="http-log-body" class="divide-y divide-sidebar-border/20">
+          </tbody>
+        </table>
+      </div>
+      
+      <div id="http-details-panel" class="hidden bg-secondary-bg border-t border-sidebar-border h-40 overflow-auto">
+        <div class="flex text-xs border-b border-sidebar-border">
+          <button id="httpDetailsTabRequest" class="px-3 py-1.5 bg-tertiary-bg text-highlight-green border-b border-highlight-green">Request</button>
+          <button id="httpDetailsTabResponse" class="px-3 py-1.5 text-gray-400">Response</button>
+        </div>
+        <div id="httpDetailsContent" class="p-2 text-xs"></div>
+      </div>
+    </div>
+    
+    <div id="httpContextMenu" class="fixed hidden bg-secondary-bg border border-sidebar-border shadow-lg rounded z-50 w-64">
+      <ul class="py-1">
+        <li><button id="menuCopyUrl" class="w-full text-left px-3 py-1 text-xs text-text-primary hover:bg-tertiary-bg">
+          <i class="fas fa-copy mr-2"></i> Copy URL
+        </button></li>
+        <li><button id="menuViewDetails" class="w-full text-left px-3 py-1 text-xs text-text-primary hover:bg-tertiary-bg">
+          <i class="fas fa-info-circle mr-2"></i> View Details
+        </button></li>
+        <li class="border-t border-sidebar-border/50 my-1"></li>
+        <li><button id="menuModifyResponse" class="w-full text-left px-3 py-1 text-xs text-custom-pink hover:bg-tertiary-bg">
+          <i class="fas fa-edit mr-2"></i> Override Future Responses
+        </button></li>
+        <li><button id="menuSaveContent" class="w-full text-left px-3 py-1 text-xs text-highlight-green hover:bg-tertiary-bg">
+          <i class="fas fa-download mr-2"></i> Save Content
+        </button></li>
+      </ul>
+    </div>
+    
+    <div id="fileSelectionDialog" class="fixed hidden inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div class="bg-secondary-bg border border-sidebar-border rounded-lg shadow-lg w-96">
+        <div class="border-b border-sidebar-border p-3 flex justify-between items-center">
+          <h3 class="text-text-primary text-sm font-medium">Override Response</h3>
+          <button id="closeFileSelectionBtn" class="text-gray-400 hover:text-text-primary">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="p-4">
+          <p class="text-xs text-gray-400 mb-2">Select a local file to replace future requests for this resource:</p>
+          <p class="text-xs text-gray-400 mb-4 italic">Your override will apply to all subsequent requests with the same path</p>
+          <input type="file" id="fileSelector" class="hidden">
+          <div class="flex items-center justify-between">
+            <div class="bg-tertiary-bg text-text-primary text-xs p-2 rounded flex-grow truncate" id="selectedFilePath">
+              No file selected
+            </div>
+            <button id="browseFileBtn" class="bg-custom-pink text-white px-2 py-1 ml-2 rounded text-xs">
+              Browse
+            </button>
+          </div>
+        </div>
+        <div class="border-t border-sidebar-border p-3 flex justify-end space-x-2">
+          <button id="cancelFileSelectionBtn" class="text-xs bg-sidebar-hover text-text-primary px-3 py-1 rounded hover:bg-sidebar-hover/70 transition">
+            Cancel
+          </button>
+          <button id="confirmFileSelectionBtn" class="text-xs bg-custom-pink text-white px-3 py-1 rounded hover:bg-custom-pink/90 transition">
+            Override
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-secondary-bg border-t border-sidebar-border p-4 mt-auto">
+      <div class="flex items-center justify-between mb-2">
+        <div id="connection-status" class="flex items-center text-xs text-gray-400">
+          <span class="w-1.5 h-1.5 rounded-full bg-error-red mr-1.5 pulse-animation"></span>
+          <span>Disconnected</span>
+        </div>
+        <div class="text-xs text-gray-400" id="timestamp-display">23:55:56</div>
+      </div>
+
+      <div id="commandContainer" class="relative">
+        <i class="fas fa-terminal absolute left-3 top-1/2 transform -translate-y-1/2 text-sidebar-text/70"></i>
+        <input id="input" type="text"
+          class="bg-tertiary-bg text-text-primary placeholder-text-primary focus:outline-none w-full pl-10 pr-3 py-2 rounded"
+          placeholder="Type a command...">
+      </div>
+
+      <div id="searchContainer" class="relative hidden">
+        <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-sidebar-text/70"></i>
+        <input id="packetSearch" type="text"
+          class="bg-tertiary-bg text-text-primary placeholder-text-primary focus:outline-none w-full pl-10 pr-3 py-2 rounded"
+          placeholder="Search packets...">
+      </div>
+    </footer>
+  </div>
+
+
+  <!-- Auto complete -->
+  <script src="app://assets/javascript/jquery-ui.js"></script>
+  <script src="app://assets/javascript/popper.min.js"></script>
+  <script src="app://assets/javascript/network-logging.js"></script>
+
+  <!-- Jam -->
+  <script src="index.js"></script>
+
+  <!-- Todo: clean this up, it's rather messy -->
+  <script>
+    $(document).ready(function () {
+      const $menuButton = $('#menuButton')
+      const $sidebar = $('#sidebar')
+      const $mainContent = $('#mainContent')
+      const $menuIcon = $('#menuIcon')
+      const $commandInput = $('#input')
+      const $packetSearch = $('#packetSearch')
+      const $messageLog = $('#message-log')
+
+      let currentFilter = 'all'
+
+      $commandInput.removeClass('hidden')
+      $packetSearch.addClass('hidden')
+
+      function toggleSidebar() {
+        const isOpen = !$sidebar.hasClass('-translate-x-full')
+        $sidebar.toggleClass('-translate-x-full', isOpen)
+        $mainContent.toggleClass('ml-64', !isOpen)
+        $menuIcon.toggleClass('fa-bars-staggered', !isOpen).toggleClass('fa-bars', isOpen)
+      }
+
+      checkEmptyPluginList()
+
+      const observer = new MutationObserver(checkEmptyPluginList)
+      observer.observe(document.getElementById('pluginList'), {
+        childList: true,
+        subtree: true
+      })
+
+      function checkEmptyPluginList() {
+        const $pluginList = $('#pluginList')
+        const $emptyMessage = $('#emptyPluginMessage')
+
+        if ($pluginList.children().not(function () {
+          return this.nodeType === 3 || $(this).text().trim() === ''
+        }).length === 0) {
+          $emptyMessage.removeClass('hidden')
+        } else {
+          $emptyMessage.addClass('hidden')
+        }
+      }
+
+      $menuButton.on('click', toggleSidebar)
+
+      function applyFilter() {
+        const $packets = $messageLog.children('div')
+        $packets.each(function () {
+          const $this = $(this)
+          const isIncoming = $this.find('.fa-arrow-down').length > 0
+          const isOutgoing = $this.find('.fa-arrow-up').length > 0
+          $this.toggle(
+            currentFilter === 'all' ||
+            (currentFilter === 'incoming' && isIncoming) ||
+            (currentFilter === 'outgoing' && isOutgoing)
+          )
+        })
+      }
+
+      function openTab(tabId) {
+        if (tabId === 'packet-logging' || tabId === 'http-logging') {
+          $('#commandContainer').addClass('hidden')
+          $('#searchContainer').removeClass('hidden')
+          $('.fa-search').addClass('hidden')
+          
+          if (tabId === 'packet-logging') {
+            $('#packetSearch').removeClass('hidden')
+          } else if (tabId === 'http-logging') {
+            $('#packetSearch').addClass('hidden')
+          }
+          
+          setTimeout(applyFilter, 0)
+        } else {
+          $('#commandContainer').removeClass('hidden')
+          $('#searchContainer').addClass('hidden')
+        }
+
+        $('.tab-content').removeClass('active').addClass('hidden')
+        $(`#${tabId}`).removeClass('hidden').addClass('active')
+        $('.tab-button').removeClass('active')
+        $(`.tab-button[data-tab="${tabId}"]`).addClass('active')
+      }
+
+      $('.tab-button').on('click', function () {
+        openTab($(this).data('tab'))
+      })
+
+      $packetSearch.on('input', function () {
+        const query = $(this).val().toLowerCase()
+        $messageLog.children('div').each(function () {
+          $(this).toggle($(this).text().toLowerCase().includes(query))
+        })
+      })
+
+      $('#filterAllButton, #filterIncomingButton, #filterOutgoingButton').on('click', function () {
+        $('#filterAllButton, #filterIncomingButton, #filterOutgoingButton').removeClass('active')
+        $(this).addClass('active')
+
+        if (this.id === 'filterAllButton') {
+          currentFilter = 'all'
+        } else if (this.id === 'filterIncomingButton') {
+          currentFilter = 'incoming'
+        } else if (this.id === 'filterOutgoingButton') {
+          currentFilter = 'outgoing'
+        }
+
+        applyFilter()
+      })
+
+      $('#exportLogsButton').on('click', function () {
+        const logs = $messageLog.children('div:visible').map(function () {
+          const $this = $(this)
+          const type = $this.find('.fa-arrow-down').length ? 'INCOMING' : 'OUTGOING'
+
+          let message = ''
+
+          const messageElement = $this.find('.text-text-primary:last')
+          if (messageElement.length) {
+            message = messageElement.text().trim()
+          } else {
+            message = $this.text().replace(/INCOMING|OUTGOING/g, '').trim()
+          }
+
+          return `[${type}] ${message}`
+        }).get()
+
+        if (!logs.length) {
+          console.log('No messages found to export')
+          return
+        }
+
+        const content = logs.join('\n')
+        const blob = new Blob([content], { type: 'text/plain' })
+        const url = URL.createObjectURL(blob)
+        const $a = $('<a>').attr({
+          href: url,
+          download: `packet-logs-${new Date().toISOString().slice(0, 10)}.txt`
+        })
+        $('body').append($a)
+        $a[0].click()
+        $a.remove()
+        URL.revokeObjectURL(url)
+      })
+
+      $('#clearLogsButton').on('click', function () {
+        $messageLog.empty()
+        $('#incomingCount, #outgoingCount, #totalCount').text('0')
+      })
+
+      const $httpLogBody = $('#http-log-body')
+      let httpCurrentFilter = 'all'
+
+      $('#filterHttpAllButton, #filterHttpIncomingButton, #filterHttpOutgoingButton').on('click', function () {
+        $('#filterHttpAllButton, #filterHttpIncomingButton, #filterHttpOutgoingButton').removeClass('active')
+        $(this).addClass('active')
+
+        if (this.id === 'filterHttpAllButton') {
+          httpCurrentFilter = 'all'
+        } else if (this.id === 'filterHttpIncomingButton') {
+          httpCurrentFilter = 'incoming'
+        } else if (this.id === 'filterHttpOutgoingButton') {
+          httpCurrentFilter = 'outgoing'
+        }
+
+        applyHttpFilter()
+      })
+
+      $('#exportHttpLogsButton').on('click', function () {
+        const logs = $('#http-log-body tr:visible').map(function () {
+          const $this = $(this)
+          const type = $this.find('.fa-arrow-down').length ? 'REQUEST' : 'RESPONSE'
+          const path = $this.find('td:eq(2)').text().trim()
+          const status = $this.find('td:eq(3)').text().trim()
+          
+          return `[${type}] ${path} - Status: ${status}`
+        }).get()
+
+        if (!logs.length) {
+          console.log('No HTTP logs found to export')
+          return
+        }
+
+        const content = logs.join('\n')
+        const blob = new Blob([content], { type: 'text/plain' })
+        const url = URL.createObjectURL(blob)
+        const $a = $('<a>').attr({
+          href: url,
+          download: `http-logs-${new Date().toISOString().slice(0, 10)}.txt`
+        })
+        $('body').append($a)
+        $a[0].click()
+        $a.remove()
+        URL.revokeObjectURL(url)
+      })
+
+      $('#clearHttpLogsButton').on('click', function () {
+        $httpLogBody.empty()
+        $('#httpIncomingCount, #httpOutgoingCount, #httpTotalCount').text('0')
+      })
+
+      function applyHttpFilter() {
+        const $requests = $('#http-log-body tr')
+        $requests.each(function () {
+          const $this = $(this)
+          const isIncoming = $this.find('.fa-arrow-down').length > 0
+          const isOutgoing = $this.find('.fa-arrow-up').length > 0
+          $this.toggle(
+            httpCurrentFilter === 'all' ||
+            (httpCurrentFilter === 'incoming' && isIncoming) ||
+            (httpCurrentFilter === 'outgoing' && isOutgoing)
+          )
+        })
+      }
+
+      window.applyFilter = applyFilter
+      window.openTab = openTab
+      window.applyHttpFilter = applyHttpFilter
+    })
+
+    $('#linksDropdownToggle').on('click', function () {
+      $('#linksDropdown').slideToggle(200)
+      $('#linksDropdownIcon').toggleClass('rotate-180')
+    })
+
+    $(document).on('click', function (event) {
+      if (!$(event.target).closest('#linksDropdownToggle, #linksDropdown').length) {
+        $('#linksDropdown').slideUp(200)
+        $('#linksDropdownIcon').removeClass('rotate-180')
+      }
+    })
+
+  </script>
+</body>
+
+</html>
