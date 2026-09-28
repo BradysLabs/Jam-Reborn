@@ -1,5 +1,8 @@
 name: Build
 
+# Builds the Windows installer and macOS disk image, then publishes them as a
+# GitHub release. Put the version in your commit message to trigger a release,
+# for example: "Release 5.0.1". You can also run it by hand from the Actions tab.
 on:
   push:
     branches:
@@ -51,10 +54,6 @@ jobs:
             os: macos-14
             flag: --mac
             artifact: jam-macos
-          - name: Linux
-            os: ubuntu-latest
-            flag: --linux
-            artifact: jam-linux
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
@@ -86,8 +85,6 @@ jobs:
           path: |
             build/*.exe
             build/*.dmg
-            build/*.AppImage
-            build/*.deb
             build/*.blockmap
             build/latest*.yml
 
