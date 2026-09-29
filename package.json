@@ -1,15 +1,16 @@
 {
-  "name": "jam",
-  "description": "Jam is a modular man-in-the-middle proxy for Animal Jam classic.",
+  "name": "jam-reborn",
+  "productName": "Jam Reborn",
+  "description": "Jam Reborn is a modular man-in-the-middle proxy for Animal Jam Classic.",
   "main": "src/index.js",
-  "version": "5.0.1",
+  "version": "6.0.0",
   "scripts": {
     "dev": "npx cross-env NODE_ENV=development nodemon",
     "build:all": "npx electron-builder build -wm"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/sxip/jam.git"
+    "url": "https://github.com/BradysLabs/Jam-Reborn.git"
   },
   "devDependencies": {
     "electron": "^32.0.1",
@@ -25,6 +26,7 @@
     "ajv": "^8.6.2",
     "cheerio": "^1.0.0",
     "cross-env": "^7.0.3",
+    "discord-rpc": "^4.0.1",
     "electron-store": "^7.0.1",
     "electron-updater": "^4.3.9",
     "express": "^4.17.1",

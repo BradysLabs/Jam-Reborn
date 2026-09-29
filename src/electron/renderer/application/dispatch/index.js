@@ -426,6 +426,16 @@ module.exports = class Dispatch {
       return
     }
 
+    let disabledPlugins = []
+    try { disabledPlugins = this._application.settings.get('disabledPlugins', []) || [] } catch (_) {}
+    if (disabledPlugins.includes(configuration.name)) {
+      this._application.consoleMessage({
+        type: 'notify',
+        message: `Plugin "${configuration.name}" is disabled, skipping.`
+      })
+      return
+    }
+
     if (this.plugins.has(configuration.name)) {
       this._application.consoleMessage({
         type: 'error',

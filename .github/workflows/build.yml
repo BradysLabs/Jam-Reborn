@@ -1,8 +1,5 @@
 name: Build
 
-# Builds the Windows installer and macOS disk image, then publishes them as a
-# GitHub release. Put the version in your commit message to trigger a release,
-# for example: "Release 5.0.1". You can also run it by hand from the Actions tab.
 on:
   push:
     branches:
@@ -11,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (for example 5.0.1)'
+        description: 'Version to release (for example 6.0.0)'
         required: true
 
 jobs:
@@ -31,11 +28,6 @@ jobs:
           if [ -z "$VERSION" ]; then
             VERSION=$(echo "$COMMIT_MESSAGE" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)
           fi
-          if [ -z "$VERSION" ]; then
-            echo "No version number in the commit message. Skipping build."
-          else
-            echo "Building version $VERSION"
-          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
   build:
@@ -49,11 +41,11 @@ jobs:
           - name: Windows
             os: windows-latest
             flag: --win
-            artifact: jam-windows
+            artifact: jam-reborn-windows
           - name: macOS
             os: macos-14
             flag: --mac
-            artifact: jam-macos
+            artifact: jam-reborn-macos
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
@@ -89,7 +81,7 @@ jobs:
             build/latest*.yml
 
   release:
-    name: Publish release
+    name: Create draft release
     needs: [version, build]
     runs-on: ubuntu-latest
     permissions:
@@ -105,7 +97,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.version.outputs.version }}
-          name: Release ${{ needs.version.outputs.version }}
-          draft: false
+          name: Jam Reborn ${{ needs.version.outputs.version }}
+          draft: true
           prerelease: false
           files: build/*

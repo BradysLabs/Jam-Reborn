@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Jam</title>
+  <title>Jam Reborn</title>
 
   <!-- jQuery -->
   <script>
@@ -19,7 +19,7 @@
 
     <div class="mb-8 flex items-center justify-center">
       <div class="p-2 rounded-full bg-tertiary-bg/50 border border-sidebar-border/30 shadow-lg">
-        <img src="file:///../../../../assets/icon.png" alt="Jam Icon" class="h-12 w-12 transition-transform hover:scale-110">
+        <img src="file:///../../../../assets/icon.png" alt="Jam Reborn Icon" class="h-12 w-12 transition-transform hover:scale-110">
       </div>
     </div>
 
@@ -55,6 +55,19 @@
           </a>
         </li>
 
+        <!-- How To -->
+        <li>
+          <a href="#"
+            class="flex items-center space-x-3 text-sidebar-text hover:bg-tertiary-bg group px-3 py-2.5 rounded-md transition-all"
+            onclick="jam.application.modals.show('howto', '#modalContainer')">
+            <div
+              class="w-8 h-8 flex items-center justify-center bg-tertiary-bg/50 rounded-md group-hover:bg-blue-400/10 transition-colors">
+              <i class="fas fa-book-open text-blue-400"></i>
+            </div>
+            <span class="font-medium">How To</span>
+          </a>
+        </li>
+
         <li class="relative">
           <button id="linksDropdownToggle"
             class="w-full flex items-center justify-between space-x-3 text-sidebar-text hover:bg-tertiary-bg group px-3 py-2.5 rounded-md transition-all">
@@ -71,14 +84,14 @@
             class="hidden absolute z-10 left-0 right-0 mt-1 bg-sidebar-bg border border-sidebar-border/30 rounded-md shadow-lg overflow-hidden transition-all duration-300 ease-in-out">
             <a href="#"
               class="flex items-center space-x-3 text-sidebar-text hover:bg-tertiary-bg group py-2 px-3 rounded-md transition-all"
-              onclick="jam.application.open('https://discord.gg/HzFe7XpuPs')">
+              onclick="jam.application.open('https://discord.gg/UvXzA2gK5W')">
               <i class="fab fa-discord text-indigo-400 w-5 text-center"></i>
               <span>Discord</span>
               <i class="fas fa-external-link-alt ml-auto text-xs opacity-0 group-hover:opacity-60"></i>
             </a>
             <a href="#"
               class="flex items-center space-x-3 text-sidebar-text hover:bg-tertiary-bg group py-2 px-3 rounded-md transition-all"
-              onclick="jam.application.open('https://github.com/sxip/jam')">
+              onclick="jam.application.open('https://github.com/BradysLabs/Jam-Reborn')">
               <i class="fab fa-github text-text-primary w-5 text-center"></i>
               <span>GitHub</span>
               <i class="fas fa-external-link-alt ml-auto text-xs opacity-0 group-hover:opacity-60"></i>
@@ -110,11 +123,6 @@
             <i class="fas fa-sync-alt"></i>
           </button>
 
-          <button
-            class="text-sidebar-text hover:text-highlight-green p-1.5 hover:bg-tertiary-bg/70 rounded transition-all"
-            onclick="jam.application.openPluginHub()" data-tooltip="Add plugins">
-            <i class="fas fa-puzzle-piece"></i>
-          </button>
         </div>
       </div>
 
@@ -131,13 +139,14 @@
     </div>
 
     <div class="mt-4 pt-3 border-t border-sidebar-border/30 text-xs text-gray-500 text-center">
-      Made with ❤️ by Sxip
+      Jam Reborn by BradysLabs<br>
+      Based on Jam by Sxip
     </div>
 
     <div class="mt-2 text-xs text-center">
       <a href="#" onclick="jam.application.open('https://ko-fi.com/sxips')" class="text-[#FF5E5B] hover:underline flex items-center justify-center space-x-1 transition-colors">
         <i class="fas fa-mug-hot"></i>
-        <span>Support on Ko-fi</span>
+        <span>Support Sxip on Ko-fi</span>
       </a>
     </div>
   </div>

@@ -2,7 +2,8 @@ const { app, BrowserWindow, globalShortcut, shell, ipcMain, protocol, net } = re
 const path = require('path')
 const { fork } = require('child_process')
 const { autoUpdater } = require('electron-updater')
-const { writeFile } = require('fs')
+const { writeFile, readFileSync } = require('fs')
+const DiscordPresence = require('./discord-presence')
 
 const isDevelopment = process.env.NODE_ENV === 'development'
 
@@ -12,7 +13,7 @@ const isDevelopment = process.env.NODE_ENV === 'development'
  * @constant
  */
 const defaultWindowOptions = {
-  title: 'Jam',
+  title: 'Jam Reborn',
   backgroundColor: '#16171f',
   resizable: true,
   useContentSize: true,
@@ -39,6 +40,7 @@ class Electron {
     this._window = null
     this._apiProcess = null
     this._httpLoggerSetup = false
+    this._discord = new DiscordPresence()
     this._setupIPC()
   }
 
@@ -59,6 +61,11 @@ class Electron {
     })
 
     ipcMain.on('open-url', (_, url) => shell.openExternal(url))
+
+    ipcMain.on('toggle-discord-presence', (_, enabled) => {
+      if (enabled) this._discord.enable()
+      else this._discord.disable()
+    })
     ipcMain.on('override-http-response', (event, { requestId, filePath }) => {
       if (this._apiProcess) {
         this._apiProcess.send({
@@ -112,6 +119,7 @@ class Electron {
   create () {
     app.whenReady().then(() => this._onReady())
     app.on('window-all-closed', () => {
+      try { this._discord.disable() } catch (_) {}
       if (process.platform !== 'darwin') app.quit()
     })
 
@@ -212,7 +220,21 @@ class Electron {
    * Handles the ready event, creates the main window and spawns the API process.
    * @private
    */
+  /**
+   * Starts Discord Rich Presence unless it's turned off in settings.
+   * @private
+   */
+  _initDiscordPresence () {
+    let enabled = true
+    try {
+      const settings = JSON.parse(readFileSync(path.resolve('settings.json'), 'utf8'))
+      enabled = settings.discordPresence !== false
+    } catch (_) {}
+    if (enabled) this._discord.enable()
+  }
+
   _onReady () {
+    this._initDiscordPresence()
     this._window = new BrowserWindow(defaultWindowOptions)
     this._window.loadFile(path.join(__dirname, 'renderer', 'index.html'))
     this._window.webContents.setWindowOpenHandler((details) => this._createWindow(details))

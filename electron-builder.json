@@ -1,5 +1,5 @@
 {
-  "productName": "jam",
+  "productName": "Jam Reborn",
   "electronVersion": "32.0.1",
   "directories": {
     "output": "build"
@@ -8,23 +8,15 @@
     "files": ["src/**/*"],
     "asar": "true",
     "target": { "target": "dmg", "arch": ["x64"] },
-    "icon": "./assets/icon.png"
+    "icon": "./assets/icon.png",
+    "artifactName": "Jam-Reborn.${ext}"
   },
   "win": {
     "files": ["src/**/*"],
     "icon": "./assets/icon.ico",
     "asar": "true",
-    "target": { "target": "nsis", "arch": ["x64"] }
-  },
-  "linux": {
-    "files": ["src/**/*"],
-    "icon": "./assets/icon.png",
-    "asar": "true",
-    "category": "Network",
-    "target": [
-      { "target": "AppImage", "arch": ["x64"] },
-      { "target": "deb", "arch": ["x64"] }
-    ]
+    "target": { "target": "nsis", "arch": ["x64"] },
+    "artifactName": "Jam-Reborn-Setup.${ext}"
   },
   "extraFiles": [
     "plugins/**/*",

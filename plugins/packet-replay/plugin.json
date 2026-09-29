@@ -1,0 +1,7 @@
+{
+  "name": "Packet Replay",
+  "description": "Save, explain, and re-send packets. Build your own packet library.",
+  "author": "BradysLabs",
+  "main": "index.html",
+  "type": "ui"
+}

@@ -147,13 +147,6 @@ module.exports = class Application extends EventEmitter {
   }
 
   /**
-   * Opens plugins hub.
-   */
-  openPluginHub () {
-    this.modals.show('plugins', '#modalContainer')
-  }
-
-  /**
    * Minimizes the application.
    * @public
    */
@@ -686,10 +679,9 @@ module.exports = class Application extends EventEmitter {
    * @public
    */
   async instantiate () {
-    await Promise.all([
-      this.settings.load(),
-      this.dispatch.load()
-    ])
+    // Load settings first so the plugin loader can honor disabledPlugins.
+    await this.settings.load()
+    await this.dispatch.load()
 
     const settings = this.settings.getAll()
     this.httpLoggingState = settings.enableHttpLogging !== false

@@ -10,6 +10,21 @@ exports.name = 'settings'
  * @param {Object} data - Additional data passed to the modal
  * @returns {JQuery<HTMLElement>} The rendered modal element
  */
+const fs = require('fs')
+const path = require('path')
+
+// Preset accent colors for the Appearance tab.
+const ACCENT_PRESETS = [
+  { name: 'Green', color: '#38b000' },
+  { name: 'Blue', color: '#335fff' },
+  { name: 'Pink', color: '#f10048' },
+  { name: 'Purple', color: '#8b5cf6' },
+  { name: 'Orange', color: '#f0851f' },
+  { name: 'Cyan', color: '#06b6d4' },
+  { name: 'Red', color: '#ef4444' },
+  { name: 'Gold', color: '#f0b429' }
+]
+
 exports.render = function (app, data = {}) {
   const $modal = $(`
     <div class="flex items-center justify-center min-h-screen p-4">
@@ -38,8 +53,11 @@ exports.render = function (app, data = {}) {
             <button id="advancedTabBtn" class="px-4 py-3 text-sm font-medium border-b-2 border-transparent text-sidebar-text hover:text-text-primary">
               Advanced
             </button>
-            <button id="repositoriesTabBtn" class="px-4 py-3 text-sm font-medium border-b-2 border-transparent text-sidebar-text hover:text-text-primary">
-              Repositories
+            <button id="appearanceTabBtn" class="px-4 py-3 text-sm font-medium border-b-2 border-transparent text-sidebar-text hover:text-text-primary">
+              Appearance
+            </button>
+            <button id="pluginsTabBtn" class="px-4 py-3 text-sm font-medium border-b-2 border-transparent text-sidebar-text hover:text-text-primary">
+              Plugins
             </button>
           </nav>
         </div>
@@ -91,64 +109,56 @@ exports.render = function (app, data = {}) {
             <p class="text-xs text-gray-400 italic">
               Note: Disabling HTTP logging can improve performance but will prevent you from monitoring and modifying HTTP requests.
             </p>
-          </div>
-          
-          <!-- Repositories Content -->
-          <div id="repositoriesTab" class="space-y-4 hidden">
-            <!-- Repository List -->
-            <div>
-              <div class="flex justify-between items-center mb-2">
-                <label class="text-sm font-medium text-text-primary">
-                  Plugin Repositories
+
+            <!-- Discord Presence Toggle -->
+            <div class="flex items-center justify-between bg-tertiary-bg/30 p-3 rounded">
+              <div>
+                <label for="discordPresence" class="text-sm text-text-primary">
+                  Show Discord status
                 </label>
-                <button id="addRepoBtn" class="text-xs bg-custom-pink px-2 py-1 rounded text-white hover:bg-custom-pink/90 transition">
-                  <i class="fas fa-plus"></i> Add New
-                </button>
+                <p class="text-xs text-gray-400">Display "Playing Jam Reborn" on your Discord profile</p>
               </div>
-              
-              <!-- Repository List with scroll -->
-              <div class="border border-sidebar-border rounded bg-tertiary-bg/30 h-60 overflow-y-auto">
-                <ul id="repoList" class="p-2 space-y-2 text-sm">
-                  <!-- Repositories will be inserted here -->
-                  <li class="text-center text-gray-400 p-4">Loading repositories...</li>
-                </ul>
-              </div>
-              <p class="mt-1 text-xs text-gray-400">
-                Repositories are sources for plugin downloads. The official repository is always included.
-              </p>
-            </div>
-            
-            <!-- Add Repository Form (hidden initially) -->
-            <div id="addRepoForm" class="border border-sidebar-border rounded p-3 hidden">
-              <h4 class="text-sm font-medium text-text-primary mb-2">Add Repository</h4>
-              
-              <div class="space-y-2">
-                <div>
-                  <label for="repoName" class="block text-xs text-text-primary">Name</label>
-                  <input id="repoName" type="text" class="bg-tertiary-bg text-text-primary placeholder-text-primary focus:outline-none rounded px-3 py-2 w-full text-sm" placeholder="Repository name">
-                </div>
-                
-                <div>
-                  <label for="repoUsername" class="block text-xs text-text-primary">GitHub Username</label>
-                  <input id="repoUsername" type="text" class="bg-tertiary-bg text-text-primary placeholder-text-primary focus:outline-none rounded px-3 py-2 w-full text-sm" placeholder="GitHub username">
-                </div>
-                
-                <div>
-                  <label for="repoRepository" class="block text-xs text-text-primary">GitHub Repository</label>
-                  <input id="repoRepository" type="text" class="bg-tertiary-bg text-text-primary placeholder-text-primary focus:outline-none rounded px-3 py-2 w-full text-sm" placeholder="Repository name">
-                </div>
-                
-                <div class="flex justify-end pt-2">
-                  <button id="cancelAddRepoBtn" class="text-xs bg-sidebar-hover text-text-primary px-3 py-1 mr-2 rounded hover:bg-sidebar-hover/70 transition">
-                    Cancel
-                  </button>
-                  <button id="saveAddRepoBtn" class="text-xs bg-custom-pink text-white px-3 py-1 rounded hover:bg-custom-pink/90 transition">
-                    Save
-                  </button>
-                </div>
+              <div class="relative inline-block w-10 align-middle select-none cursor-pointer">
+                <input type="checkbox" id="discordPresence" class="sr-only">
+                <div class="block bg-tertiary-bg w-10 h-6 rounded-full"></div>
+                <div id="discordPresenceToggle" class="dot absolute left-1 top-1 bg-gray-400 w-4 h-4 rounded-full transition"></div>
               </div>
             </div>
           </div>
+
+          <!-- Appearance Content -->
+          <div id="appearanceTab" class="space-y-4 hidden">
+            <div>
+              <label class="block mb-2 text-sm font-medium text-text-primary">Theme</label>
+              <p class="text-xs text-gray-400 mb-3">Sets the background and text together. Applies instantly.</p>
+              <div id="themePresets" class="grid grid-cols-2 gap-2"></div>
+            </div>
+            <div class="pt-1">
+              <label class="block mb-2 text-sm font-medium text-text-primary">Accent Color</label>
+              <p class="text-xs text-gray-400 mb-3">Changes the app's highlight color. Applies instantly.</p>
+              <div id="accentSwatches" class="grid grid-cols-4 gap-2"></div>
+            </div>
+            <div class="flex items-center gap-2 pt-1">
+              <label for="accentCustom" class="text-sm text-text-primary">Custom</label>
+              <input id="accentCustom" type="color" class="w-8 h-8 bg-transparent border-0 cursor-pointer">
+              <span id="accentValue" class="text-xs text-gray-400 font-mono"></span>
+            </div>
+          </div>
+
+          <!-- Plugins Content -->
+          <div id="pluginsTab" class="space-y-4 hidden">
+            <div class="flex justify-between items-center">
+              <label class="text-sm font-medium text-text-primary">Installed Plugins</label>
+              <span class="text-xs text-gray-400">Changes apply after a reload</span>
+            </div>
+            <ul id="pluginToggleList" class="space-y-2 text-sm max-h-72 overflow-y-auto">
+              <li class="text-center text-gray-400 p-4">Loading plugins...</li>
+            </ul>
+            <p class="text-xs text-gray-400 italic">
+              Disabled plugins stay on disk but won't load. Reload plugins (sidebar) or restart to apply.
+            </p>
+          </div>
+
         </div>
         
         <!-- Modal Footer -->
@@ -166,9 +176,195 @@ exports.render = function (app, data = {}) {
 
   setupEventHandlers($modal, app)
   loadSettings($modal, app)
-  loadRepositories($modal, app)
   setupToggleSwitches($modal)
+  loadAppearance($modal, app)
+  loadPluginToggles($modal, app)
   return $modal
+}
+
+/**
+ * Resolves the plugins folder the same way the loader does.
+ * @returns {string}
+ */
+const pluginsDir = () => {
+  if (process.platform === 'darwin') {
+    return path.join(__dirname, '..', '..', '..', '..', '..', '..', '..', 'plugins')
+  }
+  return path.resolve('plugins')
+}
+
+/**
+ * Persists a single setting value.
+ */
+const setSetting = (app, key, value) => {
+  const settings = app.settings && typeof app.settings.getAll === 'function' ? app.settings.getAll() : {}
+  settings[key] = value
+  if (app.settings && typeof app.settings.setAll === 'function') app.settings.setAll(settings)
+}
+
+/**
+ * Builds the Appearance tab: accent swatches + custom color, applied live.
+ * @param {JQuery<HTMLElement>} $modal
+ * @param {Application} app
+ */
+const loadAppearance = ($modal, app) => {
+  loadThemePresets($modal, app)
+
+  const current = (app.settings && typeof app.settings.get === 'function')
+    ? app.settings.get('accentColor', '#38b000')
+    : '#38b000'
+
+  const $swatches = $modal.find('#accentSwatches')
+  const $custom = $modal.find('#accentCustom')
+  const $value = $modal.find('#accentValue')
+
+  const apply = (color) => {
+    if (window.jamApplyTheme) window.jamApplyTheme(color)
+    setSetting(app, 'accentColor', color)
+    $value.text(color)
+    $custom.val(color)
+    $swatches.find('.accent-swatch').each(function () {
+      $(this).toggleClass('ring-2 ring-white', $(this).data('color').toLowerCase() === color.toLowerCase())
+    })
+  }
+
+  $swatches.empty()
+  ACCENT_PRESETS.forEach(preset => {
+    const $btn = $(`<button type="button" class="accent-swatch h-9 rounded-md border border-sidebar-border/50 transition" title="${preset.name}" style="background:${preset.color}"></button>`)
+    $btn.attr('data-color', preset.color)
+    $btn.on('click', () => apply(preset.color))
+    $swatches.append($btn)
+  })
+
+  $custom.on('input', function () { apply($(this).val()) })
+
+  $value.text(current)
+  $custom.val(current)
+  $swatches.find('.accent-swatch').each(function () {
+    $(this).toggleClass('ring-2 ring-white', $(this).data('color').toLowerCase() === current.toLowerCase())
+  })
+}
+
+/**
+ * Builds the Theme presets: one button per theme in window.jamThemes.
+ * @param {JQuery<HTMLElement>} $modal
+ * @param {Application} app
+ */
+const loadThemePresets = ($modal, app) => {
+  const $wrap = $modal.find('#themePresets')
+  const themes = window.jamThemes || []
+  const currentName = (app.settings && typeof app.settings.get === 'function')
+    ? app.settings.get('themeName', 'Dark')
+    : 'Dark'
+
+  const markSelected = (name) => {
+    $wrap.find('.theme-preset').each(function () {
+      $(this).toggleClass('ring-2 ring-white', $(this).data('theme') === name)
+    })
+  }
+
+  $wrap.empty()
+  themes.forEach(theme => {
+    const c = theme.colors
+    const $btn = $(`
+      <button type="button" class="theme-preset flex items-center gap-2 p-2 rounded-md border border-sidebar-border/50 transition" data-theme="${theme.name}" style="background:${c.primaryBg}">
+        <span style="display:flex;">
+          <span style="width:10px;height:16px;background:${c.secondaryBg};border-radius:2px 0 0 2px;"></span>
+          <span style="width:10px;height:16px;background:${c.tertiaryBg};"></span>
+          <span style="width:10px;height:16px;background:${c.sidebarBg};border-radius:0 2px 2px 0;"></span>
+        </span>
+        <span style="color:${c.textPrimary};font-size:12px;font-weight:600;">${theme.name}</span>
+      </button>
+    `)
+    $btn.on('click', () => {
+      if (window.jamApplyBackgroundTheme) window.jamApplyBackgroundTheme(theme.name)
+      setSetting(app, 'themeName', theme.name)
+      markSelected(theme.name)
+    })
+    $wrap.append($btn)
+  })
+
+  markSelected(currentName)
+}
+
+/**
+ * Builds the Plugins tab: one row per plugin folder with an enable toggle.
+ * @param {JQuery<HTMLElement>} $modal
+ * @param {Application} app
+ */
+const loadPluginToggles = ($modal, app) => {
+  const $list = $modal.find('#pluginToggleList')
+  $list.empty()
+
+  let disabled = []
+  try { disabled = app.settings.get('disabledPlugins', []) || [] } catch (_) {}
+
+  let entries = []
+  try {
+    const dir = pluginsDir()
+    const folders = fs.readdirSync(dir, { withFileTypes: true }).filter(d => d.isDirectory())
+    entries = folders.map(folder => {
+      const jsonPath = path.join(dir, folder.name, 'plugin.json')
+      let meta = { name: folder.name, description: '' }
+      try { meta = { ...meta, ...JSON.parse(fs.readFileSync(jsonPath, 'utf8')) } } catch (_) {}
+      return { folder: folder.name, name: meta.name || folder.name, description: meta.description || '', author: meta.author || '' }
+    })
+  } catch (error) {
+    $list.html('<li class="text-center text-error-red p-4">Could not read the plugins folder.</li>')
+    return
+  }
+
+  if (entries.length === 0) {
+    $list.html('<li class="text-center text-gray-400 p-4">No plugins installed.</li>')
+    return
+  }
+
+  entries.sort((a, b) => a.name.localeCompare(b.name))
+
+  entries.forEach(entry => {
+    const isEnabled = !disabled.includes(entry.name)
+    const $li = $(`
+      <li class="flex items-center justify-between bg-tertiary-bg/30 p-2.5 rounded">
+        <div class="min-w-0 pr-3">
+          <div class="text-text-primary font-medium truncate">${escapeHtml(entry.name)}</div>
+          <div class="text-xs text-gray-400 truncate">${escapeHtml(entry.description)}</div>
+        </div>
+        <div class="relative inline-block w-10 align-middle select-none cursor-pointer flex-shrink-0">
+          <div class="block bg-tertiary-bg w-10 h-6 rounded-full"></div>
+          <div class="plugin-toggle-dot dot absolute top-1 w-4 h-4 rounded-full transition ${isEnabled ? 'translate-x-5 bg-highlight-green' : 'left-1 bg-gray-400'}"></div>
+        </div>
+      </li>
+    `)
+
+    $li.find('.plugin-toggle-dot').parent().on('click', function () {
+      let list = []
+      try { list = app.settings.get('disabledPlugins', []) || [] } catch (_) {}
+      const nowEnabled = list.includes(entry.name) // was disabled -> will enable
+      if (nowEnabled) {
+        list = list.filter(n => n !== entry.name)
+      } else {
+        list.push(entry.name)
+      }
+      setSetting(app, 'disabledPlugins', list)
+
+      const $dot = $(this).find('.plugin-toggle-dot')
+      if (nowEnabled) $dot.removeClass('left-1 bg-gray-400').addClass('translate-x-5 bg-highlight-green')
+      else $dot.removeClass('translate-x-5 bg-highlight-green').addClass('left-1 bg-gray-400')
+
+      showToast(`${entry.name} ${nowEnabled ? 'enabled' : 'disabled'} - reload to apply`, 'info')
+    })
+
+    $list.append($li)
+  })
+}
+
+/**
+ * Escapes text for safe insertion into HTML.
+ */
+const escapeHtml = (str) => {
+  const div = document.createElement('div')
+  div.textContent = String(str == null ? '' : str)
+  return div.innerHTML
 }
 
 /**
@@ -204,6 +400,19 @@ const setupToggleSwitches = ($modal) => {
   } else {
     $toggleDot.removeClass('translate-x-4 bg-custom-pink').addClass('left-1 bg-gray-400')
   }
+
+  // Discord presence toggle
+  const $discord = $modal.find('#discordPresence')
+  const $discordDot = $modal.find('#discordPresenceToggle')
+  const setDiscordDot = () => {
+    if ($discord.prop('checked')) $discordDot.removeClass('left-1 bg-gray-400').addClass('translate-x-4 bg-custom-pink')
+    else $discordDot.removeClass('translate-x-4 bg-custom-pink').addClass('left-1 bg-gray-400')
+  }
+  $discordDot.parent().on('click', function () {
+    $discord.prop('checked', !$discord.prop('checked'))
+    setDiscordDot()
+  })
+  setDiscordDot()
 }
 
 /**
@@ -228,37 +437,12 @@ const setupEventHandlers = ($modal, app) => {
     switchTab($modal, 'advanced')
   })
 
-  $modal.find('#repositoriesTabBtn').on('click', () => {
-    switchTab($modal, 'repositories')
+  $modal.find('#appearanceTabBtn').on('click', () => {
+    switchTab($modal, 'appearance')
   })
 
-  $modal.find('#addRepoBtn').on('click', () => {
-    $modal.find('#addRepoForm').removeClass('hidden')
-    $modal.find('#repoName').focus()
-  })
-
-  $modal.find('#cancelAddRepoBtn').on('click', () => {
-    $modal.find('#addRepoForm').addClass('hidden')
-    $modal.find('#repoName').val('')
-    $modal.find('#repoUsername').val('')
-    $modal.find('#repoRepository').val('')
-  })
-
-  $modal.find('#saveAddRepoBtn').on('click', () => {
-    const name = $modal.find('#repoName').val().trim()
-    const username = $modal.find('#repoUsername').val().trim()
-    const repository = $modal.find('#repoRepository').val().trim()
-
-    if (!name || !username || !repository) {
-      showToast('Please fill in all fields', 'warning')
-      return
-    }
-
-    addRepository($modal, app, { name, username, repository })
-    $modal.find('#addRepoForm').addClass('hidden')
-    $modal.find('#repoName').val('')
-    $modal.find('#repoUsername').val('')
-    $modal.find('#repoRepository').val('')
+  $modal.find('#pluginsTabBtn').on('click', () => {
+    switchTab($modal, 'plugins')
   })
 
   $modal.find('#generateUuidBtn').on('click', () => {
@@ -270,22 +454,16 @@ const setupEventHandlers = ($modal, app) => {
 /**
  * Switch between settings tabs
  * @param {JQuery<HTMLElement>} $modal - The modal element
- * @param {string} tabName - The tab to show ('network', 'advanced', or 'repositories')
+ * @param {string} tabName - The tab to show ('network' or 'advanced')
  */
 const switchTab = ($modal, tabName) => {
-  $modal.find('#networkTab, #advancedTab, #repositoriesTab').addClass('hidden')
-  $modal.find('#networkTabBtn, #advancedTabBtn, #repositoriesTabBtn').removeClass('border-custom-pink text-custom-pink').addClass('border-transparent text-sidebar-text')
-
-  if (tabName === 'network') {
-    $modal.find('#networkTab').removeClass('hidden')
-    $modal.find('#networkTabBtn').removeClass('border-transparent text-sidebar-text').addClass('border-custom-pink text-custom-pink')
-  } else if (tabName === 'advanced') {
-    $modal.find('#advancedTab').removeClass('hidden')
-    $modal.find('#advancedTabBtn').removeClass('border-transparent text-sidebar-text').addClass('border-custom-pink text-custom-pink')
-  } else if (tabName === 'repositories') {
-    $modal.find('#repositoriesTab').removeClass('hidden')
-    $modal.find('#repositoriesTabBtn').removeClass('border-transparent text-sidebar-text').addClass('border-custom-pink text-custom-pink')
-  }
+  const tabs = ['network', 'advanced', 'appearance', 'plugins']
+  tabs.forEach(t => {
+    $modal.find(`#${t}Tab`).addClass('hidden')
+    $modal.find(`#${t}TabBtn`).removeClass('border-custom-pink text-custom-pink').addClass('border-transparent text-sidebar-text')
+  })
+  $modal.find(`#${tabName}Tab`).removeClass('hidden')
+  $modal.find(`#${tabName}TabBtn`).removeClass('border-transparent text-sidebar-text').addClass('border-custom-pink text-custom-pink')
 }
 
 /**
@@ -304,134 +482,9 @@ const loadSettings = ($modal, app) => {
     $modal.find('#smartfoxServer').val(settings.smartfoxServer || 'lb-iss02-classic-prod.animaljam.com')
     $modal.find('#secureConnection').prop('checked', settings.secureConnection === true)
     $modal.find('#enableHttpLogging').prop('checked', settings.enableHttpLogging !== false)
+    $modal.find('#discordPresence').prop('checked', settings.discordPresence !== false)
   } catch (error) {
     showToast('Error loading settings', 'error')
-  }
-}
-
-/**
- * Load repositories into the list
- * @param {JQuery<HTMLElement>} $modal - The modal element
- * @param {Application} app - The application instance
- */
-const loadRepositories = ($modal, app) => {
-  try {
-    const settings = app.settings && typeof app.settings.getAll === 'function' ? app.settings.getAll() : {}
-    const repositories = settings.repositories || []
-
-    const $repoList = $modal.find('#repoList')
-    $repoList.empty()
-
-    if (repositories.length === 0) {
-      $repoList.append(`
-        <li class="flex justify-between items-center p-2 rounded bg-tertiary-bg">
-          <div class="flex items-center">
-            <span class="w-4 h-4 flex items-center justify-center text-highlight-yellow">
-              <i class="fas fa-star"></i>
-            </span>
-            <span class="ml-2 text-text-primary">Official</span>
-          </div>
-          <span class="text-gray-400 text-xs bg-tertiary-bg/80 px-1 rounded">Default</span>
-        </li>
-      `)
-    } else {
-      repositories.forEach((repo, index) => {
-        const isOfficial = index === 0 || repo.name.toLowerCase() === 'official'
-        const repoIcon = isOfficial ? 'fa-star' : 'fa-code-branch'
-        const iconColor = isOfficial ? 'text-highlight-yellow' : 'text-custom-blue'
-        const isRemovable = !isOfficial
-
-        $repoList.append(`
-          <li class="flex justify-between items-center p-2 rounded bg-tertiary-bg" data-index="${index}">
-            <div class="flex items-center">
-              <span class="w-4 h-4 flex items-center justify-center ${iconColor}">
-                <i class="fas ${repoIcon}"></i>
-              </span>
-              <span class="ml-2 text-text-primary">${repo.name}</span>
-            </div>
-            <div>
-              ${isRemovable
-                ? `<button class="remove-repo-btn text-gray-400 hover:text-error-red transition ml-2">
-                  <i class="fas fa-trash-alt"></i>
-                </button>`
-                : '<span class="text-gray-400 text-xs bg-tertiary-bg/80 px-1 rounded">Default</span>'
-              }
-            </div>
-          </li>
-        `)
-      })
-    }
-
-    $repoList.find('.remove-repo-btn').on('click', function () {
-      const index = $(this).closest('li').data('index')
-      removeRepository($modal, app, index)
-    })
-  } catch (error) {
-    showToast('Error loading repositories', 'error')
-  }
-}
-
-/**
- * Add a new repository
- * @param {JQuery<HTMLElement>} $modal - The modal element
- * @param {Application} app - The application instance
- * @param {Object} repo - The repository to add
- */
-const addRepository = ($modal, app, repo) => {
-  try {
-    const settings = app.settings && typeof app.settings.getAll === 'function' ? app.settings.getAll() : {}
-    const repositories = settings.repositories || []
-
-    if (repositories.some(r => r.username === repo.username && r.repository === repo.repository)) {
-      showToast('Repository with this username and repository already exists', 'warning')
-      return
-    }
-
-    repositories.push(repo)
-
-    if (!settings.repositories) {
-      settings.repositories = repositories
-    }
-
-    if (app.settings && typeof app.settings.setAll === 'function') {
-      app.settings.setAll(settings)
-    }
-
-    loadRepositories($modal, app)
-    showToast('Repository added successfully', 'success')
-  } catch (error) {
-    showToast('Error adding repository', 'error')
-  }
-}
-
-/**
- * Remove a repository
- * @param {JQuery<HTMLElement>} $modal - The modal element
- * @param {Application} app - The application instance
- * @param {number} index - The index of the repository to remove
- */
-const removeRepository = ($modal, app, index) => {
-  try {
-    const settings = app.settings && typeof app.settings.getAll === 'function' ? app.settings.getAll() : {}
-    const repositories = settings.repositories || []
-
-    if (index === 0) {
-      showToast('Cannot remove the official repository', 'warning')
-      return
-    }
-
-    repositories.splice(index, 1)
-
-    settings.repositories = repositories
-
-    if (app.settings && typeof app.settings.setAll === 'function') {
-      app.settings.setAll(settings)
-    }
-
-    loadRepositories($modal, app)
-    showToast('Repository removed successfully', 'success')
-  } catch (error) {
-    showToast('Error removing repository', 'error')
   }
 }
 
@@ -448,8 +501,15 @@ const saveSettings = ($modal, app) => {
     settings.secureConnection = $modal.find('#secureConnection').prop('checked')
     settings.enableHttpLogging = $modal.find('#enableHttpLogging').prop('checked')
 
+    const discordWas = settings.discordPresence !== false
+    settings.discordPresence = $modal.find('#discordPresence').prop('checked')
+
     if (app.settings && typeof app.settings.setAll === 'function') {
       app.settings.setAll(settings)
+    }
+
+    if (discordWas !== settings.discordPresence && window.ipcRenderer) {
+      window.ipcRenderer.send('toggle-discord-presence', settings.discordPresence)
     }
 
     const httpLoggingChanged = app.httpLoggingState !== settings.enableHttpLogging

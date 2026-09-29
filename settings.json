@@ -1,6 +1,5 @@
-{
-  "smartfoxServer": "lb-iss02-classic-prod.animaljam.com",
-  "secureConnection": true,
-  "repositories": [],
-  "enableHttpLogging": false
-}
+   {
+     "smartfoxServer": "lb-iss02-classic-prod.animaljam.com",
+     "secureConnection": true,
+     "enableHttpLogging": false
+   }
