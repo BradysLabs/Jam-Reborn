@@ -44,6 +44,8 @@ Every plugin has a full guide in the app under **How To**. Plugins that send pac
 
 ### Windows
 
+> **"Windows protected your PC"?** Jam Reborn isn't code-signed, so Windows shows this warning for new installers. Click **More info**, then **Run anyway**.
+
 1. Download [Jam-Reborn-Setup.exe](https://github.com/BradysLabs/Jam-Reborn/releases/latest).
 2. Run the installer.
 3. Launch **Jam Reborn** from your desktop or Start menu shortcut.
