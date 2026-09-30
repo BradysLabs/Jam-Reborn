@@ -1,6 +1,6 @@
 const path = require('path')
 const os = require('os')
-const { copyFile, rm, mkdir, cp } = require('fs/promises')
+const { copyFile, rm, mkdir, cp, stat } = require('fs/promises')
 const { existsSync } = require('fs')
 const { execFile } = require('child_process')
 const { promisify } = require('util')
@@ -36,6 +36,30 @@ const JAM_CLASSIC_CACHE_PATH = process.platform === 'win32'
   : process.platform === 'darwin'
     ? path.join(os.homedir(), 'Library', 'Application Support', 'Jam Classic', 'Cache')
     : undefined
+
+/**
+ * Custom asar file name for this platform
+ * @constant
+ */
+const CUSTOM_ASAR_NAME = process.platform === 'win32'
+  ? 'winapp.asar'
+  : process.platform === 'darwin'
+    ? 'osxapp.asar'
+    : undefined
+
+/**
+ * Finds the bundled custom asar in both dev and installed builds
+ * @returns {string|null}
+ */
+const findCustomAsar = () => {
+  if (!CUSTOM_ASAR_NAME) return null
+  const candidates = [
+    process.resourcesPath && path.join(process.resourcesPath, 'assets', CUSTOM_ASAR_NAME),
+    path.join(path.dirname(process.execPath), 'assets', CUSTOM_ASAR_NAME),
+    path.resolve(__dirname, '..', '..', '..', '..', '..', 'assets', CUSTOM_ASAR_NAME)
+  ].filter(Boolean)
+  return candidates.find(candidate => existsSync(candidate)) || null
+}
 
 module.exports = class Patcher {
   /**
@@ -131,11 +155,12 @@ module.exports = class Patcher {
         } catch (copyError) {
           throw new Error(`Failed to copy files: ${copyError.message}`)
         }
+      }
 
+      if (!(await this.isPatched())) {
         await this.patchCustomInstallation()
-
         this._application.consoleMessage({
-          message: 'Custom Jam Classic installation created successfully!',
+          message: 'Custom Jam Classic installation is ready.',
           type: 'success'
         })
       }
@@ -149,6 +174,25 @@ module.exports = class Patcher {
   }
 
   /**
+   * Checks that the custom installation is using the bundled asar
+   * @returns {Promise<boolean>}
+   */
+  async isPatched () {
+    const asarPath = path.join(JAM_CLASSIC_BASE_PATH, 'resources', 'app.asar')
+    process.noAsar = true
+    try {
+      const customAsarPath = findCustomAsar()
+      if (!customAsarPath || !existsSync(asarPath)) return false
+      const [installed, bundled] = await Promise.all([stat(asarPath), stat(customAsarPath)])
+      return installed.size === bundled.size
+    } catch (_) {
+      return false
+    } finally {
+      process.noAsar = false
+    }
+  }
+
+  /**
    * Patches custom Jam installation with the modified asar
    * @returns {Promise<void>}
    */
@@ -157,21 +201,16 @@ module.exports = class Patcher {
     const asarPath = path.join(resourcesDir, 'app.asar')
     const asarUnpackedPath = path.join(resourcesDir, 'app.asar.unpacked')
 
-    const customAsarPath = process.platform === 'win32'
-      ? path.resolve(__dirname, '..', '..', '..', '..', '..', 'assets', 'winapp.asar')
-      : process.platform === 'darwin'
-        ? path.resolve(__dirname, '..', '..', '..', '..', '..', 'assets', 'osxapp.asar')
-        : undefined
-
     try {
       process.noAsar = true
+      const customAsarPath = findCustomAsar()
 
       if (!existsSync(resourcesDir)) {
         await mkdir(resourcesDir, { recursive: true })
       }
 
-      if (!existsSync(customAsarPath)) {
-        throw new Error(`Custom asar file not found at: ${customAsarPath}`)
+      if (!customAsarPath) {
+        throw new Error(`${CUSTOM_ASAR_NAME} not found in the Jam Reborn install folder`)
       }
 
       if (existsSync(asarPath)) {
