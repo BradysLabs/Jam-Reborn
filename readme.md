@@ -37,3 +37,18 @@ Jam Reborn sits between Animal Jam Classic and the game server, so plugins can r
 | Packet Replay | Window | Save, explain, and send packets |
 | Membership | Command | Shows the game as a member on your screen only |
 | Achievements
+
+
+## Legal Notice
+
+**No liability.** Jam Reborn is used entirely at your own risk. The authors and contributors are not responsible for any consequences of using it, including account suspensions or bans, lost items or data, or any other damage.
+
+**No warranty.** Jam Reborn is provided "as is", without warranty of any kind, express or implied. There is no guarantee that it works, keeps working after Animal Jam updates, or will receive support, updates or fixes.
+
+**Not affiliated.** Jam Reborn is an independent, community-maintained project. It is not affiliated with, endorsed by, or supported by WildWorks or Animal Jam. Animal Jam and all related game assets, names and trademarks belong to their respective owners.
+
+**Acceptable use.** Do not use Jam Reborn to access accounts that aren't yours, test or collect login details, check accounts, harass other players, or get around Animal Jam's paid features. Jam Reborn is meant for learning how the game's network protocol works and for building plugins.
+
+**Third-party code.** Parts of Jam Reborn are based on Jam and animaljam.js by Sxip, used with permission. Their original copyright notices are kept.
+
+**License.** Jam Reborn is released under the [MIT License](LICENSE). You may use, copy, modify and share it, as long as the copyright and license notice are included. See the LICENSE file for the full terms.
