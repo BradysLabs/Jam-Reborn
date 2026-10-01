@@ -7,6 +7,7 @@ const Patcher = require('./patcher')
 const Dispatch = require('./dispatch')
 const HttpClient = require('../../../services/HttpClient')
 const ModalSystem = require('./modals')
+const ItemDatabase = require('../../../services/ItemDatabase')
 
 module.exports = class Application extends EventEmitter {
   /**
@@ -51,6 +52,13 @@ module.exports = class Application extends EventEmitter {
      */
     this.modals = new ModalSystem(this)
     this.modals.initialize()
+
+    /**
+     * Item names and prices from the game's defpacks.
+     * @type {ItemDatabase}
+     * @public
+     */
+    this.items = new ItemDatabase()
 
     /**
      * HTTP logging state
@@ -693,5 +701,17 @@ module.exports = class Application extends EventEmitter {
 
     await this.server.serve()
     this.emit('ready')
+
+    this.items.load()
+      .then(() => this.consoleMessage({ message: `Loaded ${this.items.clothing.size + this.items.den.size} item names (game version ${this.items.deployVersion}).`, type: 'success' }))
+      .catch(error => this.consoleMessage({ message: `Item names unavailable: ${error.message}`, type: 'warn' }))
+
+    setInterval(() => {
+      this.items.refresh()
+        .then(updated => {
+          if (updated) this.consoleMessage({ message: `Animal Jam updated. Loaded item names for game version ${this.items.deployVersion}.`, type: 'success' })
+        })
+        .catch(() => {})
+    }, 1000 * 60 * 30)
   }
 }

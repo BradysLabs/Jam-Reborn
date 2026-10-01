@@ -1,0 +1,7 @@
+{
+  "name": "Glow Picker",
+  "description": "Pick your glow color from presets or RGB.",
+  "author": "BradysLabs",
+  "main": "index.html",
+  "type": "ui"
+}

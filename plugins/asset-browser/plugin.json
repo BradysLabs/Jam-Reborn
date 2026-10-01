@@ -1,0 +1,7 @@
+{
+  "name": "Asset Browser",
+  "description": "Browse every clothing and den item, the game's data files and their addresses.",
+  "author": "BradysLabs",
+  "main": "index.html",
+  "type": "ui"
+}

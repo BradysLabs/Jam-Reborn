@@ -1,0 +1,7 @@
+{
+  "name": "Masterpiece Studio",
+  "description": "Turn a picture into a masterpiece file, or open one to see the picture inside.",
+  "author": "BradysLabs",
+  "main": "index.html",
+  "type": "ui"
+}
