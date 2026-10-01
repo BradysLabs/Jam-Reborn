@@ -49,6 +49,4 @@ Jam Reborn sits between Animal Jam Classic and the game server, so plugins can r
 
 **Acceptable use.** Do not use Jam Reborn to access accounts that aren't yours, test or collect login details, check accounts, harass other players, or get around Animal Jam's paid features. Jam Reborn is meant for learning how the game's network protocol works and for building plugins.
 
-**Third-party code.** Parts of Jam Reborn are based on Jam and animaljam.js by Sxip, used with permission. Their original copyright notices are kept.
-
 **License.** Jam Reborn is released under the [MIT License](LICENSE). You may use, copy, modify and share it, as long as the copyright and license notice are included. See the LICENSE file for the full terms.
