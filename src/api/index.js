@@ -5,11 +5,26 @@ const express = require('express')
  * Routes
  */
 const { router: ApiRouter, httpLogger } = require('./routes')
+const passthrough = require('./passthrough')
 
 /**
  * Express instance
  */
 const app = express()
+
+/**
+ * Jammer Central (masterpiece submissions and the art gallery).
+ * The game is loaded from this local server, and Jammer Central only accepts
+ * uploads from games loaded from Animal Jam's content server, so the game is
+ * pointed here and requests are forwarded to the real Jammer Central unchanged.
+ */
+app.use('/jammercentral', passthrough({
+  target: 'https://jammercentral.animaljam.com/game/',
+  headers: { Referer: 'https://desktop.animaljam.com/gameClient/game/index.html' },
+  onRequest: ({ method, url }) => {
+    httpLogger.emit('request', { id: `jc_${Date.now()}`, path: url, method, headers: {}, timestamp: Date.now(), type: 'jammercentral' })
+  }
+}))
 
 /**
  * Middleware
