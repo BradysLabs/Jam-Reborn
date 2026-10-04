@@ -1,5 +1,7 @@
 {
   "name": "Achievements",
   "description": "Gives your character (most) in-game achievements.",
+  "category": "Gameplay",
+  "icon": "fa-trophy",
   "game": "animal-jam-classic"
 }

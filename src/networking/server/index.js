@@ -80,7 +80,15 @@ module.exports = class Server {
 
       try {
         await client.connect()
-        this.clients.add(client)
+
+        // connect() retries on its own and doesn't throw; only keep clients
+        // that actually reached the server, so Jam doesn't think it's
+        // connected and plugins don't write to a dead socket.
+        if (client.connected) {
+          this.clients.add(client)
+        } else {
+          connection.destroy()
+        }
       } catch (error) {
         if (this.application) {
           this.application.consoleMessage({

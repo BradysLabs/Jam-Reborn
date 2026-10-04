@@ -7,3 +7,5 @@ assets/winapp/
 assets/osxapp/
 assets/jam-client/
 cache/
+logs/
+settings.local.json

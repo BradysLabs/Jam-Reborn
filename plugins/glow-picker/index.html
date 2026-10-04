@@ -42,6 +42,16 @@
       border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.5); }
     .hint { color: var(--muted); font-size: 10px; margin-top: 4px; }
 
+    .swaps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .swap { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer;
+      border: 1px solid var(--border); background: var(--panel); color: var(--text); font-size: 11px; font-weight: 600;
+      text-align: left; transition: all .15s ease; }
+    .swap:hover { border-color: rgba(156,163,175,0.35); }
+    .swap .chip { width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.15); }
+    .swap.active { border-color: var(--accent); background: rgba(52, 211, 153, 0.1); }
+    .swap.active .chip { animation: spin 1.2s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
     .slider { display: grid; grid-template-columns: 62px 1fr 34px; align-items: center; gap: 8px; margin-bottom: 6px; }
     .slider span { color: var(--muted); }
     .slider output { text-align: right; font-family: "SF Mono", Consolas, monospace; }
@@ -76,6 +86,12 @@
       <div class="label">Presets</div>
       <div class="presets" id="presets"></div>
       <div class="hint">Click to pick. Right-click to add or remove from Cycle.</div>
+    </div>
+
+    <div>
+      <div class="label">Swaps</div>
+      <div class="swaps" id="swaps"></div>
+      <div class="hint">Click a swap to start it, click again to stop. Uses the speed below.</div>
     </div>
 
     <div>

@@ -15,6 +15,21 @@ const PRESETS = [
   { name: 'Black', hex: '#000000' }
 ]
 
+// One-click swaps: the glow flips between these colors in order.
+const SWAPS = [
+  { name: 'Red & Blue', colors: ['#ff0000', '#0040ff'] },
+  { name: 'Black & White', colors: ['#000000', '#ffffff'] },
+  { name: 'Christmas', colors: ['#ff0000', '#1aff4a'] },
+  { name: 'Neon', colors: ['#ff2fc8', '#00e5ff'] },
+  { name: 'Fire', colors: ['#ff0000', '#ff8a00', '#ffe600'] },
+  { name: 'Ice', colors: ['#00e5ff', '#ffffff'] },
+  { name: 'Gold & Black', colors: ['#ffc400', '#000000'] },
+  { name: 'Halloween', colors: ['#ff8a00', '#9b30ff'] },
+  { name: 'Ocean', colors: ['#0040ff', '#00e5ff', '#00b3a4'] },
+  { name: 'Candy', colors: ['#ff4fa0', '#ffffff'] },
+  { name: 'Rainbow', colors: ['#ff0000', '#ff8a00', '#ffe600', '#1aff4a', '#00e5ff', '#0040ff', '#9b30ff'] }
+]
+
 const MIN_SPEED = 600
 const MIN_RANDOM = 1019311667
 const MAX_RANDOM = 4294967295
@@ -27,13 +42,14 @@ const el = {
   live: $('live'), swatch: $('swatch'), hex: $('hex'), value: $('value'), status: $('status'),
   presets: $('presets'), r: $('r'), g: $('g'), b: $('b'), a: $('a'),
   rOut: $('rOut'), gOut: $('gOut'), bOut: $('bOut'), aOut: $('aOut'),
-  speed: $('speed'), stop: $('stop'), modes: [...document.querySelectorAll('[data-mode]')]
+  speed: $('speed'), stop: $('stop'), swaps: $('swaps'), modes: [...document.querySelectorAll('[data-mode]')]
 }
 
 let jam = null
 let timer = null
 let mode = null
 let cycleIndex = 0
+let activeSwap = null
 let recent = []
 let lastConfirmed = 0
 let warned = false
@@ -127,6 +143,33 @@ function renderPresets () {
   }
 }
 
+function swapChipStyle (colors) {
+  const step = 360 / colors.length
+  return `conic-gradient(${colors.map((c, i) => `${c} ${i * step}deg ${(i + 1) * step}deg`).join(', ')})`
+}
+
+function renderSwaps () {
+  el.swaps.innerHTML = ''
+  SWAPS.forEach((swap, index) => {
+    const button = document.createElement('button')
+    button.className = 'swap' + (mode === 'swap' && activeSwap === index ? ' active' : '')
+    button.title = swap.colors.join(' / ')
+    const chip = document.createElement('span')
+    chip.className = 'chip'
+    chip.style.background = swapChipStyle(swap.colors)
+    const label = document.createElement('span')
+    label.textContent = swap.name
+    button.append(chip, label)
+    button.addEventListener('click', () => {
+      if (mode === 'swap' && activeSwap === index) return stop()
+      activeSwap = index
+      cycleIndex = 0
+      start('swap')
+    })
+    el.swaps.appendChild(button)
+  })
+}
+
 function setStatus (text, kind = '') {
   el.status.textContent = text
   el.status.className = kind
@@ -135,6 +178,7 @@ function setStatus (text, kind = '') {
 function renderMode () {
   el.modes.forEach(b => b.classList.toggle('active', b.dataset.mode === mode))
   el.live.classList.toggle('live', mode !== null)
+  renderSwaps()
   render()
 }
 
@@ -154,6 +198,14 @@ async function send (value) {
 
 function nextValue () {
   if (mode === 'random') return randomValue()
+  if (mode === 'swap') {
+    const colors = SWAPS[activeSwap] ? SWAPS[activeSwap].colors : []
+    if (!colors.length) return null
+    const rgb = hexToRgb(colors[cycleIndex % colors.length])
+    cycleIndex++
+    if (rgb) setColor({ ...rgb })
+    return rgb ? toGlowValue({ ...rgb, a: +el.a.value }) : null
+  }
   if (mode === 'cycle') {
     const rgb = hexToRgb(saved.cycle[cycleIndex % saved.cycle.length])
     cycleIndex++
@@ -162,10 +214,16 @@ function nextValue () {
   return toGlowValue(current())
 }
 
+function modeLabel () {
+  if (mode === 'swap' && SWAPS[activeSwap]) return SWAPS[activeSwap].name
+  return mode ? mode[0].toUpperCase() + mode.slice(1) : ''
+}
+
 function stop () {
   if (timer) clearInterval(timer)
   timer = null
   mode = null
+  activeSwap = null
   renderMode()
   setStatus('Off')
 }
@@ -202,7 +260,7 @@ function start (newMode) {
     return
   }
   timer = setInterval(tick, speed)
-  setStatus(`${newMode[0].toUpperCase() + newMode.slice(1)} on, every ${speed}ms`)
+  setStatus(`${modeLabel()} on, every ${speed}ms`)
 }
 
 function onIncoming ({ message }) {
@@ -212,7 +270,7 @@ function onIncoming ({ message }) {
   lastConfirmed = Date.now()
   if (el.status.className !== 'ok') {
     warned = false
-    setStatus(mode ? `${mode[0].toUpperCase() + mode.slice(1)} on, confirmed by server` : 'Confirmed by server', 'ok')
+    setStatus(mode ? `${modeLabel()} on, confirmed by server` : 'Confirmed by server', 'ok')
   }
 }
 

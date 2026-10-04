@@ -8,6 +8,8 @@ const Dispatch = require('./dispatch')
 const HttpClient = require('../../../services/HttpClient')
 const ModalSystem = require('./modals')
 const ItemDatabase = require('../../../services/ItemDatabase')
+const StreamingMode = require('../../../services/StreamingMode')
+const PacketLogger = require('../../../services/PacketLogger')
 
 module.exports = class Application extends EventEmitter {
   /**
@@ -30,6 +32,20 @@ module.exports = class Application extends EventEmitter {
      * @public
      */
     this.settings = new Settings()
+
+    /**
+     * Streaming mode (hides your username on stream).
+     * @type {StreamingMode}
+     * @public
+     */
+    this.streamingMode = new StreamingMode(this)
+
+    /**
+     * Optional log file of console messages and packets.
+     * @type {PacketLogger}
+     * @public
+     */
+    this.packetLogger = new PacketLogger(this)
 
     /**
      * The reference to the patcher manager.
@@ -369,6 +385,18 @@ module.exports = class Application extends EventEmitter {
   consoleMessage ({ message, type = 'success', withStatus = true, time = true, isPacket = false, isIncoming = false, details = null } = {}) {
     if (!message) return
 
+    if (!isPacket && this.packetLogger) this.packetLogger.console(type, message)
+
+    // Streaming mode: never show the real username in the console.
+    if (this.streamingMode && this.streamingMode.enabled) {
+      if (typeof message === 'string') message = this.streamingMode.mask(message)
+      if (details) {
+        try {
+          details = JSON.parse(this.streamingMode.mask(JSON.stringify(details)))
+        } catch (_) {}
+      }
+    }
+
     const baseTypeClasses = {
       success: 'bg-highlight-green/10 border-l-4 border-highlight-green text-highlight-green',
       error: 'bg-error-red/10 border-l-4 border-error-red text-error-red',
@@ -582,103 +610,128 @@ module.exports = class Application extends EventEmitter {
   }
 
   /**
-   * Renders a plugin item in the sidebar.
-   * @param {Object} plugin - The plugin configuration object
-   * @returns {JQuery<HTMLElement>} - The rendered plugin element
+   * Called by the plugin loader for every plugin. The sidebar only shows
+   * favorites, so this just schedules a sidebar refresh.
+   * @public
    */
-  renderPluginItems ({ name, type, description, author = 'Sxip' } = {}) {
-    const getIconClass = () => {
-      switch (type) {
-        case 'ui': return 'fa-desktop'
-        case 'game': return 'fa-gamepad'
-        default: return 'fa-plug'
-      }
+  renderPluginItems () {
+    clearTimeout(this._sidebarRenderTimer)
+    this._sidebarRenderTimer = setTimeout(() => this.renderSidebarPlugins(), 50)
+  }
+
+  /**
+   * Names of the plugins pinned to the sidebar.
+   * @returns {string[]}
+   * @public
+   */
+  favoritePlugins () {
+    try {
+      const favorites = this.settings.get('favoritePlugins', [])
+      return Array.isArray(favorites) ? favorites : []
+    } catch (_) {
+      return []
+    }
+  }
+
+  /**
+   * Pins or unpins a plugin from the sidebar.
+   * @param {string} name
+   * @public
+   */
+  toggleFavoritePlugin (name) {
+    const favorites = this.favoritePlugins()
+    const next = favorites.includes(name)
+      ? favorites.filter(n => n !== name)
+      : [...favorites, name]
+    this.settings.update('favoritePlugins', next)
+    this.renderSidebarPlugins()
+  }
+
+  /**
+   * Opens the Plugin Hub.
+   * @public
+   */
+  openPluginHub () {
+    this.modals.show('plugins', '#modalContainer')
+  }
+
+  /**
+   * Renders the sidebar: a "Browse all" button plus compact rows for
+   * favorite plugins.
+   * @public
+   */
+  renderSidebarPlugins () {
+    const { categoryOf, iconOf } = require('./modals/plugins')
+    const favorites = this.favoritePlugins()
+    const loaded = [...this.dispatch.plugins.values()].map(p => p.configuration)
+    const pinned = loaded
+      .filter(c => favorites.includes(c.name))
+      .sort((a, b) => favorites.indexOf(a.name) - favorites.indexOf(b.name))
+
+    this.$pluginList.empty()
+
+    // Browse-all button
+    const $browse = $('<li>', { class: 'plugin-item plugin-browse' }).append(
+      $('<div>', {
+        class: 'flex items-center px-3 py-2.5 rounded-md cursor-pointer transition-colors duration-150 hover:bg-tertiary-bg/70 border border-dashed border-sidebar-border/60',
+        click: () => this.openPluginHub()
+      }).append(
+        $('<div>', { class: 'w-7 h-7 flex items-center justify-center rounded-md mr-3 flex-shrink-0 text-highlight-green bg-highlight-green/10' })
+          .append($('<i>', { class: 'fas fa-th-large text-sm' })),
+        $('<span>', { class: 'text-sidebar-text font-medium text-sm flex-1', text: 'Browse all plugins' }),
+        $('<span>', { class: 'text-[11px] text-gray-400', text: String(loaded.length) })
+      )
+    )
+    this.$pluginList.append($browse)
+
+    const waiting = this.dispatch.pendingPlugins ? this.dispatch.pendingPlugins.size : 0
+    if (waiting) {
+      this.$pluginList.append($('<li>', { class: 'plugin-item' }).append(
+        $('<div>', {
+          class: 'flex items-center px-3 py-2 rounded-md cursor-pointer text-[12px] text-highlight-yellow bg-highlight-yellow/10 hover:bg-highlight-yellow/20 transition-colors',
+          html: `<i class="fas fa-shield-alt mr-2"></i>${waiting} new plugin${waiting === 1 ? '' : 's'} need${waiting === 1 ? 's' : ''} review`,
+          click: () => this.openPluginHub()
+        })
+      ))
     }
 
-    const getIconColorClass = () => {
-      switch (type) {
-        case 'ui': return 'text-highlight-green bg-highlight-green/10'
-        case 'game': return 'text-highlight-yellow bg-highlight-yellow/10'
-        default: return 'text-blue-400 bg-blue-400/10'
-      }
+    if (!pinned.length) {
+      this.$pluginList.append($('<li>', {
+        class: 'plugin-item px-3 py-2 text-[11px] text-gray-400 leading-snug',
+        html: '<i class="fas fa-star text-amber-400 mr-1"></i>Star plugins in the hub to pin them here.'
+      }))
+      return
     }
 
-    const onClickEvent = type === 'ui' ? () => jam.application.dispatch.open(name) : null
-
-    const $listItem = $('<li>', {
-      class: `plugin-item ${type === 'ui' ? 'group' : ''}`,
-      'data-plugin-name': name.toLowerCase(),
-      'data-plugin-type': type
-    })
-
-    const $container = $('<div>', {
-      class: `flex items-center px-3 py-3.5 ${type === 'ui' ? 'hover:bg-tertiary-bg/70 cursor-pointer' : ''} rounded-md transition-colors duration-150`,
-      click: onClickEvent
-    })
-
-    const $iconContainer = $('<div>', {
-      class: `w-8 h-8 flex items-center justify-center ${getIconColorClass()} rounded-md mr-3 flex-shrink-0 transition-transform group-hover:scale-110`
-    }).append($('<i>', { class: `fas ${getIconClass()} text-base` }))
-
-    const $contentContainer = $('<div>', { class: 'flex-1 min-w-0' })
-
-    const $titleRow = $('<div>', { class: 'flex items-center justify-between' })
-
-    $titleRow.append($('<span>', {
-      class: 'text-sidebar-text font-medium truncate text-[15px] group-hover:text-text-primary transition-colors',
-      text: name
-    }))
-
-    const $metaRow = $('<div>', {
-      class: 'flex items-center text-[11px] text-gray-400 mt-1'
-    })
-
-    $metaRow.append($('<span>', {
-      class: 'flex items-center',
-      html: `<i class="fas fa-user mr-1 opacity-70"></i>${author}`
-    }))
-
-    const $description = $('<p>', {
-      class: 'text-xs text-gray-400 break-words mt-1.5 pr-1',
-      text: description || `${type.charAt(0).toUpperCase() + type.slice(1)} plugin for Animal Jam`,
-      title: description
-    })
-
-    if (type === 'game') {
-      const $actionButton = $('<button>', {
-        class: 'ml-2 text-gray-400 hover:text-text-primary p-1 rounded-full hover:bg-tertiary-bg/50 transition-colors opacity-0 group-hover:opacity-100',
-        html: '<i class="fas fa-ellipsis-v text-xs"></i>',
-        title: 'Plugin options'
+    pinned.forEach(configuration => {
+      const isUi = configuration.type === 'ui'
+      const $row = $('<div>', {
+        class: `flex items-center px-3 py-2 rounded-md transition-colors duration-150 ${isUi ? 'hover:bg-tertiary-bg/70 cursor-pointer' : ''}`,
+        title: configuration.description || configuration.name,
+        click: isUi ? () => this.dispatch.open(configuration.name) : null
       })
 
-      $actionButton.on('click', (e) => {
-        e.stopPropagation()
-      })
+      $row.append(
+        $('<div>', {
+          class: `w-7 h-7 flex items-center justify-center rounded-md mr-3 flex-shrink-0 ${isUi ? 'text-highlight-green bg-highlight-green/10' : 'text-highlight-yellow bg-highlight-yellow/10'}`
+        }).append($('<i>', { class: `fas ${iconOf(configuration)} text-sm` })),
+        $('<div>', { class: 'flex-1 min-w-0' }).append(
+          $('<div>', { class: 'text-sidebar-text font-medium truncate text-sm', text: configuration.name }),
+          $('<div>', { class: 'text-[10px] text-gray-400 truncate', text: categoryOf(configuration) })
+        ),
+        $('<button>', {
+          class: 'ml-2 text-amber-400 hover:text-gray-400 p-1 rounded transition-colors',
+          title: 'Unpin from sidebar',
+          html: '<i class="fas fa-star text-xs"></i>',
+          click: (e) => {
+            e.stopPropagation()
+            this.toggleFavoritePlugin(configuration.name)
+          }
+        })
+      )
 
-      $iconContainer.after($actionButton)
-    }
-
-    $contentContainer.append($titleRow, $metaRow, $description)
-    $container.append($iconContainer, $contentContainer)
-    $listItem.append($container)
-
-    $listItem.css({
-      opacity: 0,
-      transform: 'translateX(-10px)'
+      this.$pluginList.append($('<li>', { class: 'plugin-item group', 'data-plugin-name': configuration.name.toLowerCase() }).append($row))
     })
-
-    if (type === 'ui') this.$pluginList.prepend($listItem)
-    else this.$pluginList.append($listItem)
-
-    setTimeout(() => {
-      $listItem.css({
-        transition: 'opacity 0.3s ease-out, transform 0.3s ease-out',
-        opacity: 1,
-        transform: 'translateX(0)'
-      })
-    }, 50)
-
-    return $listItem
   }
 
   /**
@@ -693,6 +746,9 @@ module.exports = class Application extends EventEmitter {
 
     const settings = this.settings.getAll()
     this.httpLoggingState = settings.enableHttpLogging !== false
+
+    // Let the game client know whether to hide the username on its login screen.
+    this.streamingMode.writeClientFlag()
 
     ipcRenderer.send('toggle-http-logging', this.httpLoggingState)
 

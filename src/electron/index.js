@@ -7,6 +7,15 @@ const DiscordPresence = require('./discord-presence')
 
 const isDevelopment = process.env.NODE_ENV === 'development'
 
+// Jam looks up settings.json, plugins/ and assets/ relative to the current
+// folder. On Windows the installed app keeps those next to Jam Reborn.exe, so
+// switch there first - otherwise launching Jam from a different folder (some
+// shortcuts, pinned taskbar icons, other launchers) loads the wrong files.
+// Running from source (npm run dev) keeps the project folder.
+if (app.isPackaged && process.platform === 'win32') {
+  try { process.chdir(path.dirname(process.execPath)) } catch (_) {}
+}
+
 /**
  * Default window options.
  * @type {Object}
@@ -68,7 +77,7 @@ class Electron {
     })
     ipcMain.on('override-http-response', (event, { requestId, filePath }) => {
       if (this._apiProcess) {
-        this._apiProcess.send({
+        this._sendToApi({
           type: 'override-response',
           requestId,
           filePath
@@ -97,7 +106,7 @@ class Electron {
     ipcMain.on('toggle-http-logging', (event, enabled) => {
       try {
         if (this._apiProcess) {
-          this._apiProcess.send({
+          this._sendToApi({
             type: 'toggle-http-logging',
             enabled
           })
@@ -196,8 +205,47 @@ class Electron {
    * @public
    */
   messageWindow (type, message = {}) {
-    if (this._window && this._window.webContents) {
+    if (this._window && !this._window.isDestroyed() && this._window.webContents && !this._window.webContents.isDestroyed()) {
       this._window.webContents.send(type, message)
+    }
+  }
+
+  /**
+   * Starts the API (file server) process and watches for it stopping, so a
+   * failed start shows a message instead of crashing Jam.
+   * @private
+   */
+  _startApiProcess () {
+    const child = fork(path.join(__dirname, '..', 'api', 'index.js'))
+    this._apiProcess = child
+
+    child.on('message', (message) => {
+      if (message && message.type === 'api-error') {
+        this.messageWindow('message', { type: 'error', message: message.message })
+      }
+    })
+    child.on('error', () => {})
+    child.on('exit', (code) => {
+      if (this._apiProcess === child) this._apiProcess = null
+      this._httpLoggerSetup = false
+      if (code) this.messageWindow('message', { type: 'warn', message: `Jam's file server stopped (code ${code}). Restart Jam to fix it.` })
+    })
+  }
+
+  /**
+   * Sends a message to the API process if it's still running.
+   * @param {object} message
+   * @returns {boolean} true if it was sent
+   * @private
+   */
+  _sendToApi (message) {
+    const child = this._apiProcess
+    if (!child || !child.connected) return false
+    try {
+      child.send(message, () => {})
+      return true
+    } catch (_) {
+      return false
     }
   }
 
@@ -212,7 +260,7 @@ class Electron {
       if (message.type === 'http-logger') this.messageWindow('http-log', message.data)
     })
 
-    this._apiProcess.send({ type: 'start-http-logging' })
+    this._sendToApi({ type: 'start-http-logging' })
     this._httpLoggerSetup = true
   }
 
@@ -227,7 +275,9 @@ class Electron {
   _initDiscordPresence () {
     let enabled = true
     try {
-      const settings = JSON.parse(readFileSync(path.resolve('settings.json'), 'utf8'))
+      // Personal settings (settings.local.json) override the shipped defaults.
+      const read = file => { try { return JSON.parse(readFileSync(path.resolve(file), 'utf8')) } catch (_) { return {} } }
+      const settings = { ...read('settings.json'), ...read('settings.local.json') }
       enabled = settings.discordPresence !== false
     } catch (_) {}
     if (enabled) this._discord.enable()
@@ -252,7 +302,7 @@ class Electron {
       return net.fetch(`file://${filePath}`)
     })
 
-    this._apiProcess = fork(path.join(__dirname, '..', 'api', 'index.js'))
+    this._startApiProcess()
 
     this._window.webContents.on('did-finish-load', () => this._setupHttpLogger())
     this._registerShortcut('F11', () => this._window.webContents.openDevTools())

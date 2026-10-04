@@ -55,6 +55,19 @@
           </a>
         </li>
 
+        <!-- Plugins -->
+        <li>
+          <a href="#"
+            class="flex items-center space-x-3 text-sidebar-text hover:bg-tertiary-bg group px-3 py-2.5 rounded-md transition-all"
+            onclick="jam.application.openPluginHub()">
+            <div
+              class="w-8 h-8 flex items-center justify-center bg-tertiary-bg/50 rounded-md group-hover:bg-highlight-green/10 transition-colors">
+              <i class="fas fa-th-large text-highlight-green"></i>
+            </div>
+            <span class="font-medium">Plugins</span>
+          </a>
+        </li>
+
         <!-- How To -->
         <li>
           <a href="#"
@@ -112,12 +125,16 @@
     <div class="flex-1 overflow-hidden flex flex-col min-h-0 px-3 pt-4 mt-2">
       <div class="flex items-center justify-between px-3 mb-4">
         <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center">
-          <span>Plugins</span>
+          <span>Favorites</span>
           <div class="ml-2 flex-grow h-px bg-sidebar-border/20"></div>
         </h2>
 
         <!-- Group the buttons together -->
         <div class="flex items-center space-x-1">
+          <button class="text-sidebar-text hover:text-highlight-green p-1.5 hover:bg-tertiary-bg/70 rounded transition-all"
+            onclick="jam.application.openPluginHub()" data-tooltip="Browse Plugins">
+            <i class="fas fa-th-large"></i>
+          </button>
           <button class="text-sidebar-text hover:text-blue-400 p-1.5 hover:bg-tertiary-bg/70 rounded transition-all"
             onclick="jam.dispatch.refresh()" data-tooltip="Reload Plugins">
             <i class="fas fa-sync-alt"></i>
@@ -127,7 +144,7 @@
       </div>
 
       <div class="flex-1 overflow-y-auto custom-scrollbar pr-1">
-        <ul id="pluginList" class="space-y-2.5">
+        <ul id="pluginList" class="space-y-1">
           <!-- Plugins -->
         </ul>
 

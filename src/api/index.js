@@ -119,7 +119,18 @@ process.on('message', message => {
 /**
  * Express listen
  */
-app.listen(8080)
+const server = app.listen(8080)
+server.on('error', err => {
+  const message = err.code === 'EADDRINUSE'
+    ? 'Port 8080 is already in use. Another copy of Jam is probably still open. Close it and restart Jam.'
+    : `Jam's file server failed to start: ${err.message}`
+  if (process.send && process.connected) {
+    process.send({ type: 'api-error', message }, () => process.exit(1))
+  } else {
+    console.error(message)
+    process.exit(1)
+  }
+})
 
 /**
  * Export HTTP logger for use in the renderer

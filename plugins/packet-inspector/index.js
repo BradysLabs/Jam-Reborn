@@ -338,7 +338,7 @@ function renderChips () {
 
 function rowEl (pkt) {
   const row = document.createElement('div')
-  row.className = `row ${pkt.dir}` +
+  row.className = `row ${pkt.dir}` + (pkt.fromPlugin ? ' plugin' : '') +
     (pkt.id === state.selectedId ? ' selected' : '') +
     (pkt.id === state.compareId ? ' compare' : '')
   row.dataset.id = pkt.id
@@ -347,7 +347,7 @@ function rowEl (pkt) {
     <span class="cat" style="background:${CATEGORIES[catOf(pkt.type)].color}"></span>
     <span class="pin">${pinned.has(pkt.id) ? '★' : ''}</span>
     <span class="arrow">${pkt.dir === 'in' ? '↓' : '↑'}</span>
-    <span class="type">${escapeHtml(pkt.type)}</span>
+    <span class="type">${escapeHtml(pkt.type)}</span>${pkt.fromPlugin ? '<span class="src" title="Sent by a plugin">plugin</span>' : ''}
     <span class="name${label ? '' : ' unknown'}" title="${escapeHtml(label || 'Not documented yet')}">${escapeHtml(label || 'Unknown')}</span>
     <span class="raw">${escapeHtml(pkt.raw)}</span>
     <span class="time">${stamp(pkt.t)}</span>`
@@ -660,7 +660,7 @@ function toggleMute (type) {
 }
 
 function asText (list) {
-  return list.map(p => `${p.dir === 'in' ? '↓' : '↑'} ${p.raw}${p.label ? `  (${p.label})` : ''}`).join('\n')
+  return list.map(p => `${p.dir === 'in' ? '↓' : '↑'}${p.fromPlugin ? ' [plugin]' : ''} ${p.raw}${p.label ? `  (${p.label})` : ''}`).join('\n')
 }
 
 function download (name, content, mime) {
@@ -725,11 +725,32 @@ function exportMenu (e) {
   showMenu(r.left, r.bottom + 4, items)
 }
 
+// Streaming mode: show the display name instead of the real username.
+function maskName (text) {
+  const streaming = jamRef && jamRef.application && jamRef.application.streamingMode
+  return streaming && typeof streaming.mask === 'function' ? streaming.mask(text) : text
+}
+
 function onPacket ({ type, message }) {
   let raw = ''
   try { raw = message.toMessage() } catch (_) { raw = String(message && message.value) }
-  const pktType = (message && message.type) || (parseXt(raw) || {}).type || '?'
-  const dir = type === 'aj' ? 'in' : 'out'
+  ingest({
+    raw,
+    type: message && message.type,
+    dir: type === 'aj' ? 'in' : 'out',
+    fromPlugin: false
+  })
+}
+
+// Packets sent by plugins (they don't pass through the proxy hooks).
+function onPluginPacket (packet) {
+  if (!packet || !packet.fromPlugin) return
+  ingest({ raw: packet.raw, type: packet.type, dir: packet.direction, fromPlugin: true })
+}
+
+function ingest ({ raw, type, dir, fromPlugin }) {
+  raw = maskName(String(raw || ''))
+  const pktType = type || (parseXt(raw) || {}).type || '?'
 
   seen.set(pktType, (seen.get(pktType) || 0) + 1)
   if (!examples.has(pktType)) examples.set(pktType, raw)
@@ -742,7 +763,7 @@ function onPacket ({ type, message }) {
 
   if (state.paused) return
 
-  const pkt = { id: state.nextId++, dir, type: pktType, raw, t: Date.now() }
+  const pkt = { id: state.nextId++, dir, type: pktType, raw, t: Date.now(), fromPlugin }
   pkt.label = rowLabel(pkt)
   state.packets.push(pkt)
 
@@ -915,7 +936,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     jamRef.application.items.load().then(() => { relabel(); refresh() }).catch(() => {})
   }
   jamRef.dispatch.onMessage({ type: ANY, callback: onPacket })
+  let stopPluginPackets = null
+  if (typeof jamRef.onPacket === 'function') stopPluginPackets = jamRef.onPacket(onPluginPacket)
+  else if (typeof jamRef.dispatch.onPacket === 'function') stopPluginPackets = jamRef.dispatch.onPacket(onPluginPacket)
   window.addEventListener('beforeunload', () => {
     try { jamRef.dispatch.offMessage({ type: ANY, callback: onPacket }) } catch (_) {}
+    try { if (stopPluginPackets) stopPluginPackets() } catch (_) {}
   })
 })

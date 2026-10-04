@@ -420,6 +420,8 @@ module.exports = class Client {
    * @public
    */
   sendConnectionMessage (message, options = {}) {
+    if (message instanceof Message) message = message.toMessage()
+    message = this._streamingMode ? this._streamingMode.toClient(message) : message
     return this._sendMessage(this._connection, message, options)
   }
 
@@ -431,7 +433,18 @@ module.exports = class Client {
    * @public
    */
   sendRemoteMessage (message, options = {}) {
+    if (message instanceof Message) message = message.toMessage()
+    message = this._streamingMode ? this._streamingMode.toServer(message) : message
     return this._sendMessage(this._aj, message, options)
+  }
+
+  /**
+   * Streaming mode service, if available.
+   * @returns {StreamingMode|null}
+   * @private
+   */
+  get _streamingMode () {
+    return (this._server && this._server.application && this._server.application.streamingMode) || null
   }
 
   /**
@@ -545,6 +558,12 @@ module.exports = class Client {
    * @private
    */
   async _onMessageReceived ({ type, message, packet }) {
+    // Learn the username from the login packet before anything is logged,
+    // so streaming mode can hide it everywhere.
+    if (type === ConnectionMessageTypes.connection && message.type === 'login' && this._streamingMode) {
+      packet = this._streamingMode.onLoginPacket(packet)
+    }
+
     this._server.application.dispatch.all({ client: this, type, message })
 
     if (type === ConnectionMessageTypes.aj && packet.includes('cross-domain-policy')) {

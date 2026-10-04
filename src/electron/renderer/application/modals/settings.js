@@ -89,6 +89,37 @@ exports.render = function (app, data = {}) {
           
           <!-- Advanced Settings Content -->
           <div id="advancedTab" class="space-y-4 hidden">
+            <h4 class="text-sm font-medium text-text-primary">Account Safety</h4>
+
+            <!-- Plugin send-rate limit -->
+            <div class="flex items-center justify-between bg-tertiary-bg/30 p-3 rounded">
+              <div class="pr-4">
+                <label for="sendRateLimit" class="text-sm text-text-primary">
+                  Plugin packet limit (per second)
+                </label>
+                <p class="text-xs text-gray-400">Slows plugins that send packets too fast, which can get accounts kicked or banned. 0 = no limit.</p>
+              </div>
+              <input type="number" id="sendRateLimit" min="0" max="200" step="1"
+                class="w-20 bg-tertiary-bg text-text-primary p-2 rounded text-sm focus:outline-none focus:ring-1 focus:ring-custom-pink">
+            </div>
+
+            <h4 class="text-sm font-medium text-text-primary">Logging</h4>
+
+            <!-- Save log files -->
+            <div class="flex items-center justify-between bg-tertiary-bg/30 p-3 rounded">
+              <div class="pr-4">
+                <label for="saveLogs" class="text-sm text-text-primary">
+                  Save log files
+                </label>
+                <p class="text-xs text-gray-400">Writes the console and every packet to the logs folder (one file per day). Handy for debugging plugins.</p>
+              </div>
+              <div class="relative inline-block w-10 align-middle select-none cursor-pointer flex-shrink-0">
+                <input type="checkbox" id="saveLogs" class="sr-only">
+                <div class="block bg-tertiary-bg w-10 h-6 rounded-full"></div>
+                <div id="saveLogsToggle" class="dot absolute left-1 top-1 bg-gray-400 w-4 h-4 rounded-full transition"></div>
+              </div>
+            </div>
+
             <h4 class="text-sm font-medium text-text-primary">Performance Options</h4>
             
             <!-- HTTP Logging Toggle -->
@@ -122,6 +153,29 @@ exports.render = function (app, data = {}) {
                 <input type="checkbox" id="discordPresence" class="sr-only">
                 <div class="block bg-tertiary-bg w-10 h-6 rounded-full"></div>
                 <div id="discordPresenceToggle" class="dot absolute left-1 top-1 bg-gray-400 w-4 h-4 rounded-full transition"></div>
+              </div>
+            </div>
+
+            <!-- Streaming Mode -->
+            <div class="bg-tertiary-bg/30 p-3 rounded space-y-3">
+              <div class="flex items-center justify-between">
+                <div>
+                  <label for="streamingMode" class="text-sm text-text-primary">
+                    Streaming mode
+                  </label>
+                  <p class="text-xs text-gray-400">Hide your username on stream: in game, on the login screen, and in Jam</p>
+                </div>
+                <div class="relative inline-block w-10 align-middle select-none cursor-pointer">
+                  <input type="checkbox" id="streamingMode" class="sr-only">
+                  <div class="block bg-tertiary-bg w-10 h-6 rounded-full"></div>
+                  <div id="streamingModeToggle" class="dot absolute left-1 top-1 bg-gray-400 w-4 h-4 rounded-full transition"></div>
+                </div>
+              </div>
+              <div>
+                <label for="streamingAlias" class="block mb-1 text-xs text-gray-400">Display name (only you see this)</label>
+                <input type="text" id="streamingAlias" maxlength="20" placeholder="Streamer"
+                  class="w-full bg-tertiary-bg text-text-primary p-2 rounded text-sm focus:outline-none focus:ring-1 focus:ring-custom-pink">
+                <p class="text-xs text-gray-400 mt-1">3-20 letters or numbers. In-game changes apply from your next login.</p>
               </div>
             </div>
           </div>
@@ -413,6 +467,34 @@ const setupToggleSwitches = ($modal) => {
     setDiscordDot()
   })
   setDiscordDot()
+
+  // Save log files toggle
+  const $saveLogs = $modal.find('#saveLogs')
+  const $saveLogsDot = $modal.find('#saveLogsToggle')
+  const setSaveLogsDot = () => {
+    if ($saveLogs.prop('checked')) $saveLogsDot.removeClass('left-1 bg-gray-400').addClass('translate-x-4 bg-custom-pink')
+    else $saveLogsDot.removeClass('translate-x-4 bg-custom-pink').addClass('left-1 bg-gray-400')
+  }
+  $saveLogsDot.parent().on('click', function () {
+    $saveLogs.prop('checked', !$saveLogs.prop('checked'))
+    setSaveLogsDot()
+  })
+  $saveLogs.on('change', setSaveLogsDot)
+  setSaveLogsDot()
+
+  // Streaming mode toggle
+  const $streaming = $modal.find('#streamingMode')
+  const $streamingDot = $modal.find('#streamingModeToggle')
+  const setStreamingDot = () => {
+    if ($streaming.prop('checked')) $streamingDot.removeClass('left-1 bg-gray-400').addClass('translate-x-4 bg-custom-pink')
+    else $streamingDot.removeClass('translate-x-4 bg-custom-pink').addClass('left-1 bg-gray-400')
+  }
+  $streamingDot.parent().on('click', function () {
+    $streaming.prop('checked', !$streaming.prop('checked'))
+    setStreamingDot()
+  })
+  $streaming.on('change', setStreamingDot)
+  setStreamingDot()
 }
 
 /**
@@ -483,6 +565,10 @@ const loadSettings = ($modal, app) => {
     $modal.find('#secureConnection').prop('checked', settings.secureConnection === true)
     $modal.find('#enableHttpLogging').prop('checked', settings.enableHttpLogging !== false)
     $modal.find('#discordPresence').prop('checked', settings.discordPresence !== false)
+    $modal.find('#streamingMode').prop('checked', settings.streamingMode === true).trigger('change')
+    $modal.find('#streamingAlias').val(settings.streamingAlias || 'Streamer')
+    $modal.find('#saveLogs').prop('checked', settings.saveLogs === true).trigger('change')
+    $modal.find('#sendRateLimit').val(settings.sendRateLimit !== undefined ? settings.sendRateLimit : 20)
   } catch (error) {
     showToast('Error loading settings', 'error')
   }
@@ -504,9 +590,25 @@ const saveSettings = ($modal, app) => {
     const discordWas = settings.discordPresence !== false
     settings.discordPresence = $modal.find('#discordPresence').prop('checked')
 
+    const alias = String($modal.find('#streamingAlias').val() || '').trim() || 'Streamer'
+    if (!/^[A-Za-z0-9]{3,20}$/.test(alias)) {
+      showToast('Display name must be 3-20 letters or numbers', 'error')
+      return
+    }
+    settings.saveLogs = $modal.find('#saveLogs').prop('checked')
+
+    const rateLimit = parseInt($modal.find('#sendRateLimit').val(), 10)
+    settings.sendRateLimit = Number.isFinite(rateLimit) && rateLimit >= 0 ? Math.min(rateLimit, 200) : 20
+
+    settings.streamingMode = $modal.find('#streamingMode').prop('checked')
+    settings.streamingAlias = alias
+
     if (app.settings && typeof app.settings.setAll === 'function') {
       app.settings.setAll(settings)
     }
+
+    // Tell the game client so its login screen hides the username too.
+    if (app.streamingMode) app.streamingMode.writeClientFlag()
 
     if (discordWas !== settings.discordPresence && window.ipcRenderer) {
       window.ipcRenderer.send('toggle-discord-presence', settings.discordPresence)

@@ -29,7 +29,7 @@ Jam Reborn sits between Animal Jam Classic and the game server, so plugins can r
 Click **Play** in the sidebar. Jam Reborn opens Animal Jam Classic connected through the proxy. The footer at the bottom shows **Connected** once you're in.
 
 ## Two kinds of plugins
-- **Window plugins** open their own panel. Click them in the sidebar's **Plugins** list.
+- **Window plugins** open their own panel. Open **Plugins** in the sidebar menu to search and browse them all, and click the ★ on any plugin to pin it to the sidebar's **Favorites**.
 - **Command plugins** run in the background. Control them by typing their command in the box at the bottom of the app and pressing **Enter**. Start typing to see suggestions, and press **Tab** to autocomplete.
 
 Each plugin's page in this guide tells you which kind it is and how to use it.

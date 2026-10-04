@@ -1,11 +1,9 @@
 const path = require('path')
 const os = require('os')
-const { copyFile, rm, mkdir, cp, stat } = require('fs/promises')
+const { copyFile, rm, mkdir, cp, stat, readFile } = require('fs/promises')
+const crypto = require('crypto')
 const { existsSync } = require('fs')
-const { execFile } = require('child_process')
-const { promisify } = require('util')
-
-const execFileAsync = promisify(execFile)
+const { spawn } = require('child_process')
 
 /**
  * Animal Jam Classic base path
@@ -90,13 +88,36 @@ module.exports = class Patcher {
           ? path.join(JAM_CLASSIC_BASE_PATH, 'MacOS', 'AJ Classic')
           : undefined
 
-      this._animalJamProcess = await execFileAsync(exePath)
+      await this._launch(exePath)
     } catch (error) {
       this._application.consoleMessage({
         message: `Failed to start Jam Classic: ${error.message}`,
         type: 'error'
       })
     }
+  }
+
+  /**
+   * Starts the game without waiting for it to close. Only a real launch
+   * failure (e.g. missing or blocked .exe) is reported - closing the game
+   * normally is not an error.
+   * @param {string} exePath
+   * @returns {Promise<void>}
+   * @private
+   */
+  _launch (exePath) {
+    return new Promise((resolve, reject) => {
+      const child = spawn(exePath, [], { detached: true, stdio: 'ignore' })
+
+      child.once('error', reject)
+      child.once('spawn', () => {
+        child.removeListener('error', reject)
+        child.on('error', () => {})
+        child.unref()
+        this._animalJamProcess = child
+        resolve()
+      })
+    })
   }
 
   /**
@@ -184,7 +205,12 @@ module.exports = class Patcher {
       const customAsarPath = findCustomAsar()
       if (!customAsarPath || !existsSync(asarPath)) return false
       const [installed, bundled] = await Promise.all([stat(asarPath), stat(customAsarPath)])
-      return installed.size === bundled.size
+      if (installed.size !== bundled.size) return false
+
+      // Same size isn't proof of the same file - compare contents too.
+      const hash = async file => crypto.createHash('sha256').update(await readFile(file)).digest('hex')
+      const [installedHash, bundledHash] = await Promise.all([hash(asarPath), hash(customAsarPath)])
+      return installedHash === bundledHash
     } catch (_) {
       return false
     } finally {

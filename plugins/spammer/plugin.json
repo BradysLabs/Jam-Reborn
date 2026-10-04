@@ -1,6 +1,8 @@
 {
   "name": "Packet Spammer",
   "description": "Spam packets like a boss!",
+  "category": "Tools",
+  "icon": "fa-bolt",
   "main": "index.html",
   "type": "ui",
   "game": "*"

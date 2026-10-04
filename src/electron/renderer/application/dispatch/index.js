@@ -16,6 +16,26 @@ const BASE_PATH = process.platform === 'win32'
     : undefined
 
 /**
+ * Plugin folders that ship with Jam Reborn. These are always trusted;
+ * any other plugin must be approved once before it loads.
+ * @constant
+ */
+const BUNDLED_PLUGINS = new Set([
+  'achievements',
+  'adventure-runner',
+  'asset-browser',
+  'glow-picker',
+  'masterpiece',
+  'membership',
+  'name-checker',
+  'packet-inspector',
+  'packet-replay',
+  'pairs',
+  'room-browser',
+  'spammer'
+])
+
+/**
  * The default Configuration schema
  * @type {Object}
  * @private
@@ -88,6 +108,29 @@ module.exports = class Dispatch {
     this.state = {}
 
     /**
+     * Listeners added with onPacket(): called with every packet, including
+     * packets sent by plugins.
+     * @type {Set<Function>}
+     * @private
+     */
+    this._packetListeners = new Set()
+
+    /**
+     * Plugins found but not loaded yet because they haven't been approved.
+     * @type {Map<string, {configuration: Object, filepath: string, folder: string}>}
+     * @public
+     */
+    this.pendingPlugins = new Map()
+
+    /**
+     * Send-rate limiting for packets plugins send to the server.
+     * @private
+     */
+    this._sendTimes = []
+    this._sendChain = Promise.resolve()
+    this._throttleWarnedAt = 0
+
+    /**
      * Stores the message hooks
      * @type {Object}
      * @public
@@ -120,8 +163,14 @@ module.exports = class Dispatch {
       type: 'aj',
       message: 'rj',
       callback: ({ message }) => {
-        const room = message.value[3]
-        this.setState('room', room)
+        // %xt%rj%<previous room id>%<success>%<room name>%<joined room id>%...
+        // e.g. %xt%rj%827248%1%denYourName%828083%...
+        const [, , , , success, roomName, roomId] = message.value
+        if (success !== '1' || !/^\d+$/.test(roomId || '')) return
+
+        this.setState('room', roomId)
+        this.setState('internalRoomId', roomId)
+        this.setState('roomName', roomName)
       }
     }).onMessage({
       type: 'aj',
@@ -134,6 +183,24 @@ module.exports = class Dispatch {
         this._application.consoleMessage({
           message: 'Successfully logged in!',
           type: 'action'
+        })
+      }
+    })
+  }
+
+  /**
+   * Commands built into Jam (re-added every time plugins load).
+   * @private
+   */
+  _registerBuiltInCommands () {
+    this.onCommand({
+      name: 'streaming',
+      description: 'Shows what streaming mode is doing right now.',
+      callback: () => {
+        const streaming = this._application.streamingMode
+        this._application.consoleMessage({
+          message: streaming ? `Streaming mode - ${streaming.status()}` : 'Streaming mode is not available.',
+          type: 'notify'
         })
       }
     })
@@ -191,10 +258,49 @@ module.exports = class Dispatch {
       const popup = window.open(url)
 
       if (popup) {
+        // The window gets its own view of dispatch that remembers the packet
+        // hooks, packet listeners and commands it adds, so they're all removed
+        // when the window closes. Without this, every reopen of a plugin
+        // stacked another set of hooks that kept running in the background.
+        const view = this._createWindowView()
+        let cleanedUp = false
+        const cleanup = () => {
+          if (cleanedUp) return
+          cleanedUp = true
+          view._dispose()
+        }
+
         popup.jam = {
           application: this._application,
-          dispatch: this
+          dispatch: view,
+          onPacket: (callback) => view.onPacket(callback),
+          offPacket: (callback) => view.offPacket(callback)
         }
+
+        // Show errors from the plugin's window in Jam's console, so broken
+        // plugins aren't silently blank.
+        const reportError = (message) => {
+          this._application.consoleMessage({
+            type: 'error',
+            message: `Plugin "${name}": ${message}`
+          })
+        }
+        popup.addEventListener('error', (event) => {
+          const where = event.filename ? ` (${path.basename(event.filename)}:${event.lineno})` : ''
+          reportError(`${event.message || 'Unknown error'}${where}`)
+        })
+        popup.addEventListener('unhandledrejection', (event) => {
+          const reason = event.reason
+          reportError(reason && reason.message ? reason.message : String(reason))
+        })
+
+        popup.addEventListener('beforeunload', cleanup)
+        const closedCheck = setInterval(() => {
+          if (popup.closed) {
+            clearInterval(closedCheck)
+            cleanup()
+          }
+        }, 2000)
       }
     } else {
       this._application.consoleMessage({
@@ -202,6 +308,66 @@ module.exports = class Dispatch {
         message: `Plugin "${name}" not found.`
       })
     }
+  }
+
+  /**
+   * A copy of dispatch for one plugin window. It works exactly like dispatch
+   * (same state, plugins and sending), but keeps a list of the hooks,
+   * packet listeners and commands the window adds so _dispose() can remove
+   * them all when the window closes.
+   * @returns {Dispatch}
+   * @private
+   */
+  _createWindowView () {
+    const root = this
+    const view = Object.create(root)
+    const hooks = []
+    const packetListeners = new Set()
+    const commands = []
+
+    view._root = root
+
+    view.onMessage = function (options = {}) {
+      root.onMessage(options)
+      if (options && typeof options.callback === 'function') hooks.push(options)
+      return view
+    }
+
+    view.offMessage = function (options = {}) {
+      root.offMessage(options)
+      const index = hooks.findIndex(h => h.callback === options.callback && h.type === options.type)
+      if (index !== -1) hooks.splice(index, 1)
+      return view
+    }
+
+    view.onPacket = function (callback) {
+      if (typeof callback !== 'function') return () => {}
+      packetListeners.add(callback)
+      root.onPacket(callback)
+      return () => view.offPacket(callback)
+    }
+
+    view.offPacket = function (callback) {
+      packetListeners.delete(callback)
+      root.offPacket(callback)
+    }
+
+    view.onCommand = function (options = {}) {
+      const added = options && !root.commands.has(options.name)
+      root.onCommand(options)
+      if (added && root.commands.has(options.name)) commands.push(options)
+      return view
+    }
+
+    view._dispose = function () {
+      hooks.splice(0).forEach(h => root.offMessage(h))
+      packetListeners.forEach(listener => root.offPacket(listener))
+      packetListeners.clear()
+      commands.splice(0).forEach(c => root.offCommand(c))
+      try { root._application.refreshAutoComplete() } catch (_) {}
+    }
+
+    return view
   }
 
   /**
@@ -274,6 +440,8 @@ module.exports = class Dispatch {
         type: 'wait'
       })
 
+      this._registerBuiltInCommands()
+
       if (!existsSync(BASE_PATH)) mkdirSync(BASE_PATH, { recursive: true })
 
       const filepaths = await this.constructor.readdirRecursive(BASE_PATH)
@@ -286,6 +454,8 @@ module.exports = class Dispatch {
         })
         return
       }
+
+      this._migrateTrustedPlugins(validPaths)
 
       const results = await Promise.allSettled(validPaths.map(async filepath => {
         try {
@@ -344,6 +514,15 @@ module.exports = class Dispatch {
    */
   async all ({ client, type, message }) {
     const messageType = message.type
+
+    if (this._packetListeners.size || this._logging) {
+      this._emitPacket({
+        raw: this.constructor._rawOf(message),
+        direction: type === ConnectionMessageTypes.aj ? 'in' : 'out',
+        type: messageType,
+        fromPlugin: false
+      })
+    }
     const hasAjHooks = type === ConnectionMessageTypes.aj && this.hooks.aj.has(messageType)
     const hasConnectionHooks = type === ConnectionMessageTypes.connection && this.hooks.connection.has(messageType)
     const hasAnyHooks = this.hooks.any.has(ConnectionMessageTypes.any)
@@ -444,6 +623,18 @@ module.exports = class Dispatch {
       return
     }
 
+    // Plugins that don't ship with Jam must be approved once before they run.
+    const folder = path.basename(filepath)
+    if (!this.isTrustedPlugin(folder)) {
+      this.pendingPlugins.set(configuration.name, { configuration, filepath, folder })
+      this._application.consoleMessage({
+        type: 'warn',
+        message: `New plugin "${configuration.name}" by ${configuration.author || 'unknown'} is waiting for your approval. Open Plugins to review it.`
+      })
+      this._application.renderPluginItems(configuration)
+      return
+    }
+
     try {
       await this.installDependencies(configuration)
 
@@ -503,6 +694,11 @@ module.exports = class Dispatch {
     }
 
     this.clearAll()
+
+    // clearAll() also removes Jam's own handlers (room and login tracking),
+    // so put them back before plugins load again.
+    this._initDefaultHandlers()
+
     await this.load()
 
     this._application.emit('refresh:plugins')
@@ -561,8 +757,8 @@ module.exports = class Dispatch {
    * @public
    */
   getState (key, defaultValue = null) {
-    if (this.state[key]) return this.state[key]
-    return defaultValue
+    const value = this.state[key]
+    return value === undefined || value === null ? defaultValue : value
   }
 
   /**
@@ -573,7 +769,7 @@ module.exports = class Dispatch {
    * @public
    */
   updateState (key, value) {
-    if (this.state[key]) this.state[key] = value
+    if (Object.prototype.hasOwnProperty.call(this.state, key)) this.state[key] = value
     else throw new Error('Invalid state key.')
     return this
   }
@@ -613,8 +809,14 @@ module.exports = class Dispatch {
    * @private
    */
   async _sendWithRetry (message, type, { retries = 0, retryDelay = 100 } = {}) {
-    const clients = [...this._application.server.clients]
+    if (this._application.server.clients.size === 0) {
+      return []
+    }
 
+    // Packets to the server are rate limited; packets to the game are not.
+    if (type === ConnectionMessageTypes.aj) await this._waitForSendSlot()
+
+    const clients = [...this._application.server.clients]
     if (clients.length === 0) {
       return []
     }
@@ -637,6 +839,18 @@ module.exports = class Dispatch {
         }
 
         const results = await Promise.all(clients.map(sendMethod))
+
+        if (this._packetListeners.size || this._logging) {
+          const raw = this.constructor._rawOf(message)
+          const parts = raw.split('%')
+          this._emitPacket({
+            raw,
+            direction: type === ConnectionMessageTypes.aj ? 'out' : 'in',
+            type: raw[0] === '%' ? (parts[2] === 'o' ? parts[3] : parts[2]) : null,
+            fromPlugin: true
+          })
+        }
+
         return results
       } catch (error) {
         lastError = error
@@ -650,6 +864,198 @@ module.exports = class Dispatch {
     })
 
     throw lastError || new Error('Failed to send message')
+  }
+
+  /**
+   * Plugin folders the user has approved.
+   * @returns {string[]}
+   * @private
+   */
+  _trustedPlugins () {
+    try {
+      const list = this._application.settings.get('trustedPlugins', null)
+      return Array.isArray(list) ? list : null
+    } catch (_) {
+      return null
+    }
+  }
+
+  /**
+   * Whether a plugin folder may load: bundled, or approved by the user.
+   * @param {string} folder
+   * @returns {boolean}
+   * @public
+   */
+  isTrustedPlugin (folder) {
+    if (BUNDLED_PLUGINS.has(folder)) return true
+    const trusted = this._trustedPlugins()
+    return Array.isArray(trusted) && trusted.includes(folder)
+  }
+
+  /**
+   * First run with plugin approval: trust every plugin that's already
+   * installed, so nothing the user already uses gets switched off.
+   * @param {string[]} pluginJsonPaths
+   * @private
+   */
+  _migrateTrustedPlugins (pluginJsonPaths) {
+    if (this._trustedPlugins() !== null) return
+    const folders = pluginJsonPaths
+      .map(file => path.basename(path.dirname(file)))
+      .filter(folder => !BUNDLED_PLUGINS.has(folder))
+    try { this._application.settings.update('trustedPlugins', [...new Set(folders)]) } catch (_) {}
+  }
+
+  /**
+   * Approves a waiting plugin and reloads plugins so it starts.
+   * @param {string} name
+   * @public
+   */
+  async approvePlugin (name) {
+    const pending = this.pendingPlugins.get(name)
+    if (!pending) return
+    const trusted = this._trustedPlugins() || []
+    if (!trusted.includes(pending.folder)) {
+      this._application.settings.update('trustedPlugins', [...trusted, pending.folder])
+    }
+    await this.refresh()
+  }
+
+  /**
+   * Turns a waiting plugin off (it stays installed; re-enable in Settings).
+   * @param {string} name
+   * @public
+   */
+  async rejectPlugin (name) {
+    const pending = this.pendingPlugins.get(name)
+    if (!pending) return
+    let disabled = []
+    try { disabled = this._application.settings.get('disabledPlugins', []) || [] } catch (_) {}
+    if (!disabled.includes(name)) {
+      this._application.settings.update('disabledPlugins', [...disabled, name])
+    }
+    this.pendingPlugins.delete(name)
+    this._application.renderPluginItems()
+  }
+
+  /**
+   * Listens to every packet: from the game, from the server, and those sent
+   * by plugins. The callback gets
+   *   { raw, direction: 'in' | 'out', type, fromPlugin, timestamp }
+   * where 'in' means towards the game and 'out' towards the server.
+   * Returns a function that stops listening.
+   * @param {Function} callback
+   * @returns {Function}
+   * @public
+   */
+  onPacket (callback) {
+    if (typeof callback !== 'function') return () => {}
+    this._packetListeners.add(callback)
+    return () => this.offPacket(callback)
+  }
+
+  /**
+   * Stops a listener added with onPacket().
+   * @param {Function} callback
+   * @public
+   */
+  offPacket (callback) {
+    this._packetListeners.delete(callback)
+  }
+
+  /**
+   * Calls every packet listener. A listener that throws (for example one
+   * from a plugin window that was closed) is removed.
+   * @param {Object} packet
+   * @private
+   */
+  _emitPacket (packet) {
+    const info = Object.freeze({ timestamp: Date.now(), ...packet })
+    if (this._logging) this._application.packetLogger.packet(info)
+    for (const listener of [...this._packetListeners]) {
+      try {
+        listener(info)
+      } catch (_) {
+        this._packetListeners.delete(listener)
+      }
+    }
+  }
+
+  /**
+   * Whether packets should be written to the log file.
+   * @returns {boolean}
+   * @private
+   */
+  get _logging () {
+    const logger = this._application.packetLogger
+    return Boolean(logger && logger.enabled)
+  }
+
+  /**
+   * Raw text of a message object or string.
+   * @param {Message|string} message
+   * @returns {string}
+   * @private
+   */
+  static _rawOf (message) {
+    if (typeof message === 'string') return message
+    try {
+      return message && typeof message.toMessage === 'function' ? message.toMessage() : String(message)
+    } catch (_) {
+      return ''
+    }
+  }
+
+  /**
+   * Max packets per second plugins may send to the server (0 = no limit).
+   * @returns {number}
+   * @private
+   */
+  get _sendRateLimit () {
+    try {
+      const limit = Number(this._application.settings.get('sendRateLimit', 20))
+      return Number.isFinite(limit) && limit > 0 ? limit : 0
+    } catch (_) {
+      return 20
+    }
+  }
+
+  /**
+   * Waits until another packet may be sent without going over the limit.
+   * Calls are queued in order, so nothing is dropped - just slowed down.
+   * @returns {Promise<void>}
+   * @private
+   */
+  _waitForSendSlot () {
+    // Plugin windows share the main limiter, so all of them together stay
+    // under the limit.
+    if (this._root && this._root !== this) return this._root._waitForSendSlot()
+
+    const run = async () => {
+      const limit = this._sendRateLimit
+      if (!limit) return
+
+      for (;;) {
+        const now = Date.now()
+        while (this._sendTimes.length && now - this._sendTimes[0] >= 1000) this._sendTimes.shift()
+        if (this._sendTimes.length < limit) break
+
+        if (now - this._throttleWarnedAt > 10000) {
+          this._throttleWarnedAt = now
+          this._application.consoleMessage({
+            type: 'warn',
+            message: `Plugins are sending packets very fast - slowing them to ${limit} per second to protect your account. (Settings > Advanced)`
+          })
+        }
+        await this.wait(1000 - (now - this._sendTimes[0]) + 1)
+      }
+
+      this._sendTimes.push(Date.now())
+    }
+
+    const slot = this._sendChain.then(run, run)
+    this._sendChain = slot.catch(() => {})
+    return slot
   }
 
   /**
@@ -746,10 +1152,10 @@ module.exports = class Dispatch {
   offCommand ({ name, callback } = {}) {
     if (!this.commands.has(name)) return
 
-    const commandCallbacks = this.commands.get(name)
-
-    const index = commandCallbacks.indexOf(callback)
-    if (index !== -1) commandCallbacks.splice(index, 1)
+    // Each name maps to one command; remove it if the callback matches
+    // (or if no callback was given).
+    const command = this.commands.get(name)
+    if (!callback || command.callback === callback) this.commands.delete(name)
     return this
   }
 
@@ -782,7 +1188,7 @@ module.exports = class Dispatch {
    * @param options
    * @public
    */
-  offMessage ({ type, callback } = {}) {
+  offMessage ({ type, message, callback } = {}) {
     const hooksMap = {
       [ConnectionMessageTypes.aj]: this.hooks.aj,
       [ConnectionMessageTypes.connection]: this.hooks.connection,
@@ -790,15 +1196,19 @@ module.exports = class Dispatch {
     }
 
     const hooks = hooksMap[type]
+    if (!hooks || typeof callback !== 'function') return this
 
-    if (hooks) {
-      const hookList = hooks.get(type)
-      if (hookList) {
-        const index = hookList.indexOf(callback)
-        if (index !== -1) {
-          hookList.splice(index, 1)
-        }
-      }
+    // Hooks are stored per packet command (or '*' for "any"). Remove the
+    // callback from that list, or from every list if no command was given.
+    const key = type === ConnectionMessageTypes.any ? ConnectionMessageTypes.any : message
+    const lists = key !== undefined && hooks.has(key)
+      ? [[key, hooks.get(key)]]
+      : [...hooks.entries()]
+
+    for (const [name, hookList] of lists) {
+      const index = hookList.indexOf(callback)
+      if (index !== -1) hookList.splice(index, 1)
+      if (hookList.length === 0) hooks.delete(name)
     }
 
     return this
@@ -959,6 +1369,8 @@ module.exports = class Dispatch {
 
     this.plugins.clear()
     this.commands.clear()
+    this._packetListeners.clear()
+    this.pendingPlugins.clear()
 
     Object.values(this.hooks).forEach(hookMap => hookMap.clear())
     this.clearAllIntervals()
