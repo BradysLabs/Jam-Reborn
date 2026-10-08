@@ -29,11 +29,16 @@ const BUNDLED_PLUGINS = new Set([
   'membership',
   'name-checker',
   'packet-inspector',
-  'packet-replay',
   'pairs',
   'room-browser',
   'spammer'
 ])
+
+/**
+ * A packet hook taking this long (ms) gets a warning in the console.
+ * @constant
+ */
+const SLOW_HOOK_MS = 100
 
 /**
  * The default Configuration schema
@@ -194,6 +199,12 @@ module.exports = class Dispatch {
    */
   _registerBuiltInCommands () {
     this.onCommand({
+      name: 'report',
+      description: 'Copies a support report (version, plugins, recent console) to paste when asking for help.',
+      callback: () => this._copySupportReport()
+    })
+
+    this.onCommand({
       name: 'streaming',
       description: 'Shows what streaming mode is doing right now.',
       callback: () => {
@@ -204,6 +215,53 @@ module.exports = class Dispatch {
         })
       }
     })
+  }
+
+  /**
+   * Builds a support report and copies it to the clipboard. Leaves out
+   * personal settings, and hides your username if streaming mode is on.
+   * @private
+   */
+  _copySupportReport () {
+    const os = require('os')
+    let version = 'unknown'
+    try { version = require(path.join(__dirname, '..', '..', '..', '..', '..', 'package.json')).version } catch (_) {}
+
+    const setting = (key, fallback) => {
+      try { return this._application.settings.get(key, fallback) } catch (_) { return fallback }
+    }
+
+    const consoleLines = []
+    try {
+      document.querySelectorAll('#messages > div').forEach(el => {
+        const text = el.textContent.replace(/\s+/g, ' ').trim()
+        if (text) consoleLines.push(text)
+      })
+    } catch (_) {}
+
+    const plugins = [...this.plugins.values()].map(p => p.configuration.name).sort()
+    const lines = [
+      `Jam Reborn ${version}`,
+      `Electron ${process.versions.electron || '?'} / Node ${process.versions.node} / ${os.platform()} ${os.release()} (${os.arch()})`,
+      `Connected: ${this.connected ? 'yes' : 'no'} | Server: ${setting('smartfoxServer', '?')} | Secure: ${setting('secureConnection', '?')}`,
+      `Streaming mode: ${setting('streamingMode', false) ? 'on' : 'off'} | Log files: ${setting('saveLogs', false) ? 'on' : 'off'} | Packet limit: ${setting('sendRateLimit', 20)}/s`,
+      `Plugins (${plugins.length}): ${plugins.join(', ') || 'none'}`,
+      this.pendingPlugins.size ? `Waiting for approval: ${[...this.pendingPlugins.keys()].join(', ')}` : null,
+      '',
+      'Recent console:',
+      ...consoleLines.slice(-40)
+    ].filter(line => line !== null)
+
+    let report = lines.join('\n')
+    const streaming = this._application.streamingMode
+    if (streaming && typeof streaming.mask === 'function') report = streaming.mask(report)
+
+    try {
+      require('electron').clipboard.writeText(report)
+      this._application.consoleMessage({ type: 'success', message: 'Support report copied. Paste it wherever you\'re asking for help.' })
+    } catch (error) {
+      this._application.consoleMessage({ type: 'error', message: `Couldn't copy the report: ${error.message}` })
+    }
   }
 
   get connected () {
@@ -262,7 +320,7 @@ module.exports = class Dispatch {
         // hooks, packet listeners and commands it adds, so they're all removed
         // when the window closes. Without this, every reopen of a plugin
         // stacked another set of hooks that kept running in the background.
-        const view = this._createWindowView()
+        const view = this._createWindowView(name)
         let cleanedUp = false
         const cleanup = () => {
           if (cleanedUp) return
@@ -318,7 +376,7 @@ module.exports = class Dispatch {
    * @returns {Dispatch}
    * @private
    */
-  _createWindowView () {
+  _createWindowView (pluginName = null) {
     const root = this
     const view = Object.create(root)
     const hooks = []
@@ -328,6 +386,7 @@ module.exports = class Dispatch {
     view._root = root
 
     view.onMessage = function (options = {}) {
+      if (options && pluginName && !options.pluginName) options = { ...options, pluginName }
       root.onMessage(options)
       if (options && typeof options.callback === 'function') hooks.push(options)
       return view
@@ -360,7 +419,11 @@ module.exports = class Dispatch {
     }
 
     view._dispose = function () {
-      hooks.splice(0).forEach(h => root.offMessage(h))
+      hooks.splice(0).forEach(h => {
+        root.offMessage(h)
+        const refs = pluginName && root._pluginReferences && root._pluginReferences.get(pluginName)
+        if (refs) refs.hooks.forEach(set => set.delete(h.callback))
+      })
       packetListeners.forEach(listener => root.offPacket(listener))
       packetListeners.clear()
       commands.splice(0).forEach(c => root.offCommand(c))
@@ -542,7 +605,7 @@ module.exports = class Dispatch {
     const context = { client, type, dispatch: this, message }
 
     try {
-      const results = await Promise.allSettled(hooks.map(hook => hook(context)))
+      const results = await Promise.allSettled(hooks.map(hook => this._runHook(hook, context, messageType)))
 
       const errors = results
         .filter(result => result.status === 'rejected')
@@ -562,6 +625,51 @@ module.exports = class Dispatch {
         message: `Unexpected error dispatching hooks for ${messageType}: ${error.message}`
       })
     }
+  }
+
+  /**
+   * Runs one packet hook and times it. Packet hooks run while the packet is
+   * waiting to be delivered, so a slow one lags the game; Jam names it in the
+   * console (at most once a minute per packet type).
+   * @private
+   */
+  _runHook (hook, context, messageType) {
+    const started = Date.now()
+    let result
+    try {
+      result = hook(context)
+    } catch (error) {
+      return Promise.reject(error)
+    }
+    const took = Date.now() - started
+    if (took >= SLOW_HOOK_MS) {
+      if (!this._slowHookWarnings) this._slowHookWarnings = new Map()
+      const now = Date.now()
+      if (now - (this._slowHookWarnings.get(messageType) || 0) > 60000) {
+        this._slowHookWarnings.set(messageType, now)
+        const owner = this._hookOwner(hook)
+        this._application.consoleMessage({
+          type: 'warn',
+          message: `${owner ? `Plugin "${owner}"` : 'A plugin'} took ${took}ms to handle a "${messageType}" packet, which can lag the game.`
+        })
+      }
+    }
+    return result
+  }
+
+  /**
+   * Name of the plugin that registered a hook, if it was registered with
+   * pluginName.
+   * @private
+   */
+  _hookOwner (hook) {
+    if (!this._pluginReferences) return null
+    for (const [name, refs] of this._pluginReferences) {
+      for (const set of refs.hooks.values()) {
+        if (set.has(hook)) return name
+      }
+    }
+    return null
   }
 
   /**

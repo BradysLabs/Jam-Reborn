@@ -728,7 +728,18 @@ function exportMenu (e) {
 // Streaming mode: show the display name instead of the real username.
 function maskName (text) {
   const streaming = jamRef && jamRef.application && jamRef.application.streamingMode
-  return streaming && typeof streaming.mask === 'function' ? streaming.mask(text) : text
+  return hideSecrets(streaming && typeof streaming.mask === 'function' ? streaming.mask(text) : text)
+}
+
+// Login tokens, hashes and emails are never shown, copied or exported.
+function hideSecrets (text) {
+  const shared = jamRef && jamRef.application && jamRef.application.hideSecrets
+  if (typeof shared === 'function') return shared(text)
+  return String(text)
+    .replace(/(<pword>\s*(?:<!\[CDATA\[)?)[\s\S]*?((?:\]\]>)?\s*<\/pword>)/gi, '$1[hidden]$2')
+    .replace(/\bh=(['"])[^'"]*\1/g, 'h=$1[hash]$1')
+    .replace(/\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}/g, '[token]')
+    .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '[email]')
 }
 
 function onPacket ({ type, message }) {

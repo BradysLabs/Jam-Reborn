@@ -1,0 +1,5 @@
+/*
+ * Jam adds its stylesheet (assets/css/style.css) to every plugin window
+ * automatically. This file only exists so plugins that link to it don't get
+ * a "file not found" error.
+ */

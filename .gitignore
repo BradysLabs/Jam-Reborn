@@ -9,3 +9,5 @@ assets/jam-client/
 cache/
 logs/
 settings.local.json
+settings.local.json.bak
+settings.local.json.tmp

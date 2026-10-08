@@ -10,6 +10,15 @@ const ModalSystem = require('./modals')
 const ItemDatabase = require('../../../services/ItemDatabase')
 const StreamingMode = require('../../../services/StreamingMode')
 const PacketLogger = require('../../../services/PacketLogger')
+const { hideSecrets } = require('../../../services/Secrets')
+
+/**
+ * How many lines the Network tab and the console keep. Older lines are
+ * removed so long sessions don't slow Jam down.
+ * @constant
+ */
+const MAX_PACKET_LINES = 3000
+const MAX_CONSOLE_LINES = 1000
 
 module.exports = class Application extends EventEmitter {
   /**
@@ -60,6 +69,14 @@ module.exports = class Application extends EventEmitter {
      * @public
      */
     this.dispatch = new Dispatch(this)
+
+    /**
+     * Hides login tokens, hashes and emails in text (for plugins that show,
+     * copy or export packets).
+     * @type {function(string): string}
+     * @public
+     */
+    this.hideSecrets = hideSecrets
 
     /**
      * Stores the modal system.
@@ -385,6 +402,12 @@ module.exports = class Application extends EventEmitter {
   consoleMessage ({ message, type = 'success', withStatus = true, time = true, isPacket = false, isIncoming = false, details = null } = {}) {
     if (!message) return
 
+    // Never show or log login tokens, hashes or emails.
+    if (typeof message === 'string') message = hideSecrets(message)
+    if (details) {
+      try { details = JSON.parse(hideSecrets(JSON.stringify(details))) } catch (_) {}
+    }
+
     if (!isPacket && this.packetLogger) this.packetLogger.console(type, message)
 
     // Streaming mode: never show the real username in the console.
@@ -486,6 +509,7 @@ module.exports = class Application extends EventEmitter {
     $messageContainer.addClass('overflow-hidden text-ellipsis whitespace-normal break-words')
     $container.append($messageContainer)
 
+    let $detailsContainer = null
     if (isPacket && details) {
       const $actionsContainer = createElement('div', 'flex ml-2 items-center')
 
@@ -519,7 +543,7 @@ module.exports = class Application extends EventEmitter {
       $actionsContainer.append($detailsButton, $copyButton)
       $container.append($actionsContainer)
 
-      const $detailsContainer = createElement(
+      $detailsContainer = createElement(
         'div',
         'bg-tertiary-bg/50 rounded-md p-3 mt-2 hidden w-full',
         `<pre class="text-xs text-text-primary overflow-auto max-h-[300px] font-mono">${JSON.stringify(details, null, 2)}</pre>`
@@ -536,7 +560,6 @@ module.exports = class Application extends EventEmitter {
         )
       })
 
-      $container.after($detailsContainer)
 
       $container.css('cursor', 'pointer')
       $container.on('click', function (e) {
@@ -546,51 +569,78 @@ module.exports = class Application extends EventEmitter {
       })
     }
 
+    // A packet line and its details panel are kept in one wrapper, so trimming
+    // old lines and filtering always treat them as a single line.
+    const $line = $detailsContainer ? $('<div>').append($container, $detailsContainer) : $container
+    this._queueConsoleElements(isPacket, isIncoming, $line)
+  }
+
+  /**
+   * Adds console/packet lines in one batch per animation frame instead of one
+   * at a time, keeps only the newest lines, and filters just the new packet
+   * rows (not the whole list) - so busy rooms and long sessions stay smooth.
+   * @private
+   */
+  _queueConsoleElements (isPacket, isIncoming, $line) {
+    if (!this._consoleQueue) {
+      this._consoleQueue = { packets: [], messages: [], incoming: 0, outgoing: 0, scheduled: false }
+    }
+    const queue = this._consoleQueue
+    const elements = [$line[0]]
+
     if (isPacket) {
-      const $totalCount = $('#totalCount')
-      const $incomingCount = $('#incomingCount')
-      const $outgoingCount = $('#outgoingCount')
-
-      const totalCount = parseInt($totalCount.text() || '0', 10) + 1
-      $totalCount.text(totalCount)
-
-      if (isIncoming) {
-        const incomingCount = parseInt($incomingCount.text() || '0', 10) + 1
-        $incomingCount.text(incomingCount)
-      } else {
-        const outgoingCount = parseInt($outgoingCount.text() || '0', 10) + 1
-        $outgoingCount.text(outgoingCount)
-      }
-
-      $('#message-log').append($container)
-
-      const $messageLog = $('#message-log')
-      const messageLogEl = $messageLog[0]
-      const isAtBottom = messageLogEl.scrollHeight - messageLogEl.scrollTop - $messageLog.innerHeight() <= 30
-
-      if (isAtBottom) {
-        requestAnimationFrame(() => {
-          messageLogEl.scrollTop = messageLogEl.scrollHeight
-        })
-      }
+      queue.packets.push(...elements)
+      if (isIncoming) queue.incoming++
+      else queue.outgoing++
     } else {
-      $('#messages').append($container)
-
-      const $messages = $('#messages')
-      const messagesEl = $messages[0]
-
-      requestAnimationFrame(() => {
-        messagesEl.scrollTop = messagesEl.scrollHeight
-      })
+      queue.messages.push(...elements)
     }
 
-    if (window.applyFilter) {
-      if (window.requestIdleCallback) {
-        window.requestIdleCallback(() => window.applyFilter())
-      } else {
-        setTimeout(() => window.applyFilter(), 0)
+    if (queue.scheduled) return
+    queue.scheduled = true
+    const schedule = window.requestAnimationFrame || (fn => setTimeout(fn, 16))
+    schedule(() => this._flushConsoleQueue())
+  }
+
+  /**
+   * Writes the queued lines to the page.
+   * @private
+   */
+  _flushConsoleQueue () {
+    const queue = this._consoleQueue
+    queue.scheduled = false
+
+    const append = (container, elements, limit, filterRows) => {
+      if (!container || !elements.length) return
+      const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 30
+      const fragment = document.createDocumentFragment()
+      for (const el of elements) {
+        if (filterRows && window.packetRowMatches && !window.packetRowMatches(el)) el.style.display = 'none'
+        fragment.appendChild(el)
       }
+      container.appendChild(fragment)
+      while (container.childElementCount > limit) container.removeChild(container.firstElementChild)
+      if (isAtBottom || !filterRows) container.scrollTop = container.scrollHeight
     }
+
+    if (queue.packets.length) {
+      const bump = (selector, by) => {
+        if (!by) return
+        const $el = $(selector)
+        $el.text(parseInt($el.text() || '0', 10) + by)
+      }
+      bump('#totalCount', queue.incoming + queue.outgoing)
+      bump('#incomingCount', queue.incoming)
+      bump('#outgoingCount', queue.outgoing)
+    }
+
+    append(document.getElementById('message-log'), queue.packets, MAX_PACKET_LINES, true)
+    append(document.getElementById('messages'), queue.messages, MAX_CONSOLE_LINES, false)
+
+    queue.packets = []
+    queue.messages = []
+    queue.incoming = 0
+    queue.outgoing = 0
   }
 
   /**

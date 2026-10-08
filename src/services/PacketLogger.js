@@ -1,5 +1,14 @@
 const path = require('path')
-const { mkdirSync, appendFile } = require('fs')
+const { mkdirSync, appendFile, readdirSync, statSync, unlinkSync } = require('fs')
+const { hideSecrets } = require('./Secrets')
+
+/**
+ * Log files older than this are deleted, and the folder is kept under
+ * MAX_TOTAL_BYTES (oldest files go first), so logs never fill up the drive.
+ * @constant
+ */
+const KEEP_DAYS = 7
+const MAX_TOTAL_BYTES = 200 * 1024 * 1024
 
 /**
  * Writes Jam's console messages and every packet to a daily log file
@@ -16,6 +25,7 @@ module.exports = class PacketLogger {
     this._buffer = []
     this._timer = null
     this._dirReady = false
+    this._lastCleanup = 0
   }
 
   /**
@@ -64,6 +74,8 @@ module.exports = class PacketLogger {
    * @private
    */
   _push (timestamp, text) {
+    // Log files never contain login tokens, hashes or emails.
+    text = hideSecrets(text)
     const streaming = this._application.streamingMode
     if (streaming && typeof streaming.mask === 'function') text = streaming.mask(text)
 
@@ -78,6 +90,36 @@ module.exports = class PacketLogger {
    * Writes buffered lines to today's file.
    * @private
    */
+  /**
+   * Deletes old log files and keeps the folder under the size limit.
+   * @public
+   */
+  cleanup () {
+    try {
+      const cutoff = Date.now() - KEEP_DAYS * 24 * 60 * 60 * 1000
+      const files = readdirSync(this.folder)
+        .filter(name => /^jam-\d{4}-\d{2}-\d{2}\.log$/.test(name))
+        .map(name => {
+          const file = path.join(this.folder, name)
+          const { size, mtimeMs } = statSync(file)
+          return { file, size, mtimeMs }
+        })
+        .sort((a, b) => a.mtimeMs - b.mtimeMs)
+
+      let total = files.reduce((sum, f) => sum + f.size, 0)
+      files.forEach((f, index) => {
+        const isNewest = index === files.length - 1
+        if (isNewest) return
+        if (f.mtimeMs < cutoff || total > MAX_TOTAL_BYTES) {
+          try {
+            unlinkSync(f.file)
+            total -= f.size
+          } catch (_) {}
+        }
+      })
+    } catch (_) { /* no logs folder yet */ }
+  }
+
   _flush () {
     this._timer = null
     if (!this._buffer.length) return
@@ -92,6 +134,11 @@ module.exports = class PacketLogger {
       }
     } catch (_) {
       return
+    }
+
+    if (Date.now() - this._lastCleanup > 60 * 60 * 1000) {
+      this._lastCleanup = Date.now()
+      this.cleanup()
     }
 
     const now = new Date()

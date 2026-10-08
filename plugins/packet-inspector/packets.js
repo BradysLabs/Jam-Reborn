@@ -97,11 +97,10 @@ const PACKETS = {
   },
 
   il: {
-    name: 'Inventory', cat: 'inventory', conf: 'confirmed',
-    desc: 'Inventory data. Field 1 = 1 is your full item list (layout not mapped yet). 2 or 3 is a single item update, e.g. after buying.',
-    in: ['?', 'list type (1 = full, 2/3 = single)', '?', '?', 'username', 'item color', '?', '?', 'inventory slot', 'item id'],
-    items: { in: { 9: 'clothing' } },
-    itemsWhen: (args) => args[1] !== '1'
+    name: 'Worn Items', cat: 'inventory', conf: 'confirmed',
+    desc: 'The items an animal is wearing. Sent for every player in the room (and for you). After the item count, each item is three fields: item id, inventory slot, color.',
+    in: ['room id', '?', '?', 'animal id', 'username', '?', '?', 'item count', 'item id', 'inventory slot', 'color'],
+    items: { in: { 8: 'clothing' } }
   },
   iu: {
     name: 'Wear / Remove Item', cat: 'inventory', conf: 'confirmed',
@@ -187,6 +186,12 @@ const PACKETS = {
     name: 'Jam-A-Gram Received', cat: 'jag', conf: 'guess',
     desc: 'A Jam-A-Gram arriving in your inbox, with sender, card and gift details.',
     in: ['-1', 'jam-a-gram number', 'sender', 'card id?', '?', '?', '?', '?', '?', 'gift item color?', '?', '?', '?', '?', '?', '?', 'uuid', '?']
+  },
+
+  wt: {
+    name: 'Jammer Wall Token', cat: 'system', conf: 'confirmed',
+    desc: 'Asks the server for a token to open the Jammer Wall. Reply status 1 = token given, 0 = refused (the wall won\'t load). In early October 2026 every request was refused, in the official client too (server-side outage).',
+    in: ['room id', 'status (1 ok, 0 refused)']
   },
 
   ka: { name: 'Keep-Alive', cat: 'system', conf: 'confirmed', desc: 'Heartbeat so the server knows you are still connected.', out: ['room id'] },

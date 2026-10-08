@@ -76,11 +76,17 @@ The plugin includes all 53 animal definitions currently mapped:
 
 ## Purchase packet
 
-The plugin sends:
+The request includes fields from the current game session, so the plugin does
+not use a hard-coded packet. Make a normal animal purchase in the game first;
+Animal Buyer captures that outgoing request and substitutes only the selected
+Animal ID. The captured template is kept in memory for the current plugin
+session and is discarded when the plugin closes.
 
-%xt%o%aa%1999292%15185%15281%27182%<ANIMAL_ID>%-1%-1%-1%
-
-Only the Animal ID is substituted.
+The generated request is editable. The Purchase button sends the text currently
+in the packet field, after checking that it is an outgoing `aa` packet with a
+numeric Animal ID. After sending, check the game for the server's result; a
+successful send only confirms that Jam Reborn passed the request to the active
+game connection.
 
 ## Features
 

@@ -445,13 +445,6 @@ const ANIMALS = [
    Packet format
    ============================================================ */
 
-const PACKET_PREFIX =
-  '%xt%o%aa%1999292%15185%15281%27182%'
-
-const PACKET_SUFFIX =
-  '%-1%-1%-1%'
-
-
 /* ============================================================
    Storage
    ============================================================ */
@@ -475,6 +468,10 @@ const state = {
   filtered: [...ANIMALS]
 }
 
+// These fields are supplied by the live game request and can change between
+// sessions. Never persist them; capture a fresh template from the game.
+let purchaseTemplate = null
+
 
 /* ============================================================
    DOM helper
@@ -491,10 +488,57 @@ const $ =
 function buildPacket (
   animalId
 ) {
-  return (
-    PACKET_PREFIX +
-    animalId +
-    PACKET_SUFFIX
+  if (!purchaseTemplate) return null
+
+  const parts = [...purchaseTemplate]
+  const roomId = dispatch.getState('room')
+  if (/^\d+$/.test(String(roomId || ''))) {
+    parts[4] = String(roomId)
+  }
+  parts[8] = String(animalId)
+  return parts.join('%')
+}
+
+
+function parseAnimalPacket (raw) {
+  if (typeof raw !== 'string') return null
+
+  const parts = raw.trim().split('%')
+  if (
+    parts[0] !== '' ||
+    parts[1] !== 'xt' ||
+    parts[2] !== 'o' ||
+    parts[3] !== 'aa' ||
+    parts.length < 13 ||
+    !/^\d+$/.test(parts[8])
+  ) return null
+
+  return {
+    parts,
+    animalId: Number(parts[8])
+  }
+}
+
+
+function capturePurchaseTemplate (packet) {
+  if (
+    !packet ||
+    packet.direction !== 'out' ||
+    packet.fromPlugin ||
+    typeof packet.raw !== 'string'
+  ) return
+
+  const captured = parseAnimalPacket(packet.raw)
+  if (!captured) return
+
+  purchaseTemplate = captured.parts
+  $('packetHelp').textContent =
+    `Captured the current in-game request for animal ID ${captured.animalId}. Edit the packet as needed; Purchase sends the text shown.`
+
+  renderSelected()
+  setStatus(
+    'Captured a current animal request from the game.',
+    'success'
   )
 }
 
@@ -982,11 +1026,14 @@ function renderSelected () {
     $('badges').innerHTML =
       ''
 
-    $('packet').textContent =
+    $('packet').value =
       'Select an animal to generate the packet.'
 
-    $('purchase').disabled =
-      true
+    $('packetHelp').textContent = purchaseTemplate
+      ? 'Current in-game request template captured.'
+      : 'Make a normal animal purchase in the game first so Animal Buyer can capture the current request fields.'
+
+    $('purchase').disabled = true
 
     return
   }
@@ -1031,13 +1078,16 @@ function renderSelected () {
   `
 
 
-  $('packet').textContent =
-    buildPacket(
-      animal.id
-    )
+  $('packet').value =
+    buildPacket(animal.id) ||
+    'No current request template captured. Make a normal animal purchase in the game first.'
+
+  $('packetHelp').textContent = purchaseTemplate
+    ? 'Editable packet. Purchase sends the text shown in this field.'
+    : 'Make a normal animal purchase in the game first so Animal Buyer can capture the current request fields.'
 
   $('purchase').disabled =
-    false
+    !purchaseTemplate
 }
 
 
@@ -1167,7 +1217,7 @@ function renderHistory () {
    Purchase
    ============================================================ */
 
-function purchaseSelected () {
+async function purchaseSelected () {
   const animal =
     getAnimal(
       state.selected
@@ -1183,11 +1233,30 @@ function purchaseSelected () {
     return
   }
 
-
-  const packet =
-    buildPacket(
-      animal.id
+  if (!purchaseTemplate) {
+    setStatus(
+      'Make a normal animal purchase in the game first so Animal Buyer can capture the current request fields.',
+      'warning'
     )
+    return
+  }
+
+
+  const rawPacket = $('packet').value
+  const parsedPacket = parseAnimalPacket(rawPacket)
+  if (!parsedPacket) {
+    setStatus(
+      'Packet format is invalid. Expected an outgoing aa animal-purchase packet with a numeric animal ID.',
+      'error'
+    )
+    return
+  }
+
+  const packet = rawPacket.trim()
+  const requestedAnimal = getAnimal(parsedPacket.animalId)
+  const requestLabel = requestedAnimal
+    ? requestedAnimal.name
+    : `animal ID ${parsedPacket.animalId}`
 
   const button =
     $('purchase')
@@ -1201,26 +1270,25 @@ function purchaseSelected () {
 
 
   setStatus(
-    `Sending purchase request for ${animal.name}...`,
+    `Sending purchase request for ${requestLabel}...`,
     'warning'
   )
 
 
   try {
 
-    dispatch.sendRemoteMessage(
-      packet
-    )
+    const results = await dispatch.sendRemoteMessage(packet)
+    if (!Array.isArray(results) || results.length === 0) {
+      throw new Error('No active game connection was available.')
+    }
 
 
-    saveHistory(
-      animal.id
-    )
+    saveHistory(parsedPacket.animalId)
 
 
     setStatus(
-      `${animal.name} purchase packet sent.`,
-      'success'
+      `${requestLabel} request sent. Check the game for the server result.`,
+      'warning'
     )
 
 
@@ -1236,21 +1304,10 @@ function purchaseSelected () {
       `Failed to send packet: ${error.message || error}`,
       'error'
     )
+  } finally {
+    button.disabled = !state.selected || !purchaseTemplate
+    button.textContent = 'Purchase Selected Animal'
   }
-
-
-  setTimeout(
-    () => {
-
-      button.disabled =
-        !state.selected
-
-      button.textContent =
-        'Purchase Selected Animal'
-
-    },
-    600
-  )
 }
 
 
@@ -1261,6 +1318,15 @@ function purchaseSelected () {
 document.addEventListener(
   'DOMContentLoaded',
   () => {
+
+    if (typeof jam.onPacket === 'function') {
+      jam.onPacket(capturePurchaseTemplate)
+    } else {
+      setStatus(
+        'This Jam Reborn version cannot capture the current animal request. Update Jam Reborn and reopen Animal Buyer.',
+        'error'
+      )
+    }
 
     $('search').addEventListener(
       'input',

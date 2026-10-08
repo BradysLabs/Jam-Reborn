@@ -1,6 +1,6 @@
 {
   "name": "Asset Browser",
-  "description": "Browse every clothing and den item, the game's data files and their addresses.",
+  "description": "Browse clothing and den items, inspect known defpacks, and discover more by scanning ID ranges.",
   "category": "Explore",
   "icon": "fa-box-open",
   "author": "BradysLabs",

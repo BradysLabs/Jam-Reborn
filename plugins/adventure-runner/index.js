@@ -410,6 +410,7 @@ async function startRun() {
 
   try {
     for (let run = 1; totalRuns === 0 || run <= totalRuns; run++) {
+      if (!running) throw new Stopped();
       setRunCounter(looping ? `Run ${run}${totalRuns ? ` / ${totalRuns}` : ''} · ${completed} done` : '');
 
       await runOnce(adventure, den, looping);

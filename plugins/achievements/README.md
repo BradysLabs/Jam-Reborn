@@ -17,10 +17,8 @@ A powerful plugin that unlocks most in-game achievements in Animal Jam Classic w
 ```
 achievements
 ```
-
 4. Wait while the plugin sequentially unlocks achievements (this process takes a few minutes)
 5. Check your profile to see all your newly unlocked achievements
-
 
 ## How It Works
 

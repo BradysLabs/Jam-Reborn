@@ -3,9 +3,36 @@ const HASH_KEY = 'W3 7r4Ck h4X0r3rs'
 const ROW_H = 30
 const PACKS = {
   clothing: { id: '1000', label: 'Clothing', nameKey: 'titleStrId' },
+  animals: { id: '1003', label: 'Animals', nameKey: 'titleStrRef' },
   den: { id: '1030', label: 'Den Items', nameKey: 'nameStrId' },
+  pets: { id: '1046', label: 'Pets', nameKey: 'titleStrId' },
   strings: { id: '10230', label: 'Text strings' }
 }
+const KNOWN_PACKS = [
+  ...Object.values(PACKS),
+  { id: '1011', label: 'Rooms' },
+  { id: '1025', label: 'Quest / adventure NPCs' },
+  { id: '1027', label: 'Item list data' },
+  { id: '1029', label: 'Image arrays' },
+  { id: '1036', label: 'Emotes' },
+  { id: '1038', label: 'Generic lists' },
+  { id: '1040', label: 'Den rooms' },
+  { id: '1042', label: 'Achievements' },
+  { id: '1047', label: 'Parties' },
+  { id: '1049', label: 'Name bar badges' },
+  { id: '1050', label: 'Battle cards' },
+  { id: '1051', label: 'Currency exchange' },
+  { id: '1052', label: 'Adventure scripts' },
+  { id: '1053', label: 'Movies / cutscenes' },
+  { id: '1054', label: 'Diamond shop' },
+  { id: '1057', label: 'Unidentified (1057)' },
+  { id: '1058', label: 'Unidentified (1058)' },
+  { id: '1061', label: 'Adopt-a-Pet' },
+  { id: '1062', label: 'Unidentified (1062)' },
+  { id: '1063', label: 'Unidentified (1063)' },
+  { id: '1064', label: 'World items' },
+  { id: '1065', label: 'Newspaper' }
+].sort((a, b) => Number(a.id) - Number(b.id))
 
 const $ = id => document.getElementById(id)
 
@@ -332,6 +359,133 @@ async function loadPack () {
   }
 }
 
+async function checkKnownPacks () {
+  const button = $('scanPacks')
+  const output = $('activePacks')
+  const status = $('scanStatus')
+  if (!state.deploy) {
+    status.textContent = 'Game version is not ready yet.'
+    return
+  }
+
+  button.disabled = true
+  output.replaceChildren()
+  status.textContent = `Checking ${KNOWN_PACKS.length} known packs in version ${state.deploy}…`
+  const results = []
+  for (let offset = 0; offset < KNOWN_PACKS.length; offset += 4) {
+    const batch = KNOWN_PACKS.slice(offset, offset + 4)
+    const batchResults = await Promise.all(batch.map(async pack => {
+      try {
+        const data = await loadRaw(pack.id)
+        return { pack, ok: true, summary: packSummary(data) }
+      } catch (error) {
+        return { pack, ok: false, error: error.message }
+      }
+    }))
+    results.push(...batchResults)
+    status.textContent = `Checked ${Math.min(offset + batch.length, KNOWN_PACKS.length)} of ${KNOWN_PACKS.length} known packs…`
+  }
+
+  for (const result of results) {
+    const row = document.createElement('div')
+    row.className = 'pack-result'
+    const label = document.createElement('span')
+    label.textContent = `${result.pack.label} (${result.pack.id})`
+    const detail = document.createElement('span')
+    detail.className = result.ok ? 'pack-active' : 'pack-missing'
+    detail.textContent = result.ok
+      ? `Available · ${result.summary.entries.toLocaleString()} entries · ${result.summary.keys.length} fields`
+      : 'Unavailable in this version or could not be decoded'
+    row.append(label, detail)
+    if (result.ok) {
+      const open = document.createElement('button')
+      open.className = 'btn small'
+      open.textContent = 'Open'
+      open.addEventListener('click', () => {
+        $('packId').value = result.pack.id
+        loadPack()
+      })
+      row.appendChild(open)
+    }
+    output.appendChild(row)
+  }
+
+  const active = results.filter(result => result.ok).length
+  status.textContent = `Found ${active} of ${results.length} known packs in version ${state.deploy}.`
+  button.disabled = false
+}
+
+async function scanDefpackRange () {
+  const button = $('scanRange')
+  const output = $('rangeScanResults')
+  const status = $('rangeScanStatus')
+  const start = Number($('scanStart').value)
+  const end = Number($('scanEnd').value)
+  const count = end - start + 1
+
+  if (!state.deploy) {
+    status.textContent = 'Game version is not ready yet.'
+    return
+  }
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 1 || end < start) {
+    status.textContent = 'Enter a valid range of positive whole-number IDs.'
+    return
+  }
+  if (count > 300) {
+    status.textContent = 'Choose a range of 300 IDs or fewer.'
+    return
+  }
+
+  button.disabled = true
+  output.replaceChildren()
+  const found = []
+  const ids = Array.from({ length: count }, (_, index) => start + index)
+  status.textContent = `Scanning ${count} IDs in deploy version ${state.deploy}…`
+
+  for (let offset = 0; offset < ids.length; offset += 4) {
+    const batch = ids.slice(offset, offset + 4)
+    const results = await Promise.all(batch.map(async id => {
+      try {
+        const data = await loadRaw(String(id))
+        return { id, summary: packSummary(data) }
+      } catch (_) {
+        return null
+      }
+    }))
+    found.push(...results.filter(Boolean))
+    const checked = Math.min(offset + batch.length, count)
+    status.textContent = `Scanned ${checked} of ${count} IDs… found ${found.length} decodable packs.`
+  }
+
+  found.forEach(result => {
+    const row = document.createElement('div')
+    row.className = 'pack-result'
+    const label = document.createElement('span')
+    label.textContent = `Defpack ${result.id}`
+    const detail = document.createElement('span')
+    detail.className = 'pack-active'
+    detail.textContent = `Available · ${result.summary.entries.toLocaleString()} entries · ${result.summary.keys.length} fields`
+    const open = document.createElement('button')
+    open.className = 'btn small'
+    open.textContent = 'Open'
+    open.addEventListener('click', () => {
+      $('packId').value = result.id
+      loadPack()
+    })
+    row.append(label, detail, open)
+    output.appendChild(row)
+  })
+
+  status.textContent = `Scanned ${count} IDs in deploy version ${state.deploy}. Found ${found.length} decodable defpacks.`
+  if (!found.length) {
+    const empty = document.createElement('div')
+    empty.className = 'empty'
+    empty.textContent = 'No decodable defpacks found in this range.'
+    output.appendChild(empty)
+  }
+  button.disabled = false
+}
+
 function updateUrl () {
   const deploy = $('uDeploy').value.trim() || '{version}'
   const folder = $('uFolder').value.trim()
@@ -417,13 +571,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     showDetail(it.id)
   })
 
-  Object.entries({ 1000: 'Clothing', 1030: 'Den items', 10230: 'Text strings' }).forEach(([id, label]) => {
+  KNOWN_PACKS.forEach(({ id, label }) => {
     const b = document.createElement('button')
     b.className = 'btn small'
     b.textContent = `${label} (${id})`
     b.addEventListener('click', () => { $('packId').value = id; loadPack() })
     $('quickPacks').appendChild(b)
   })
+  $('scanPacks').addEventListener('click', checkKnownPacks)
+  $('scanRange').addEventListener('click', scanDefpackRange)
+  $('scanEnd').addEventListener('keydown', e => { if (e.key === 'Enter') scanDefpackRange() })
   $('loadPack').addEventListener('click', loadPack)
   $('packId').addEventListener('keydown', e => { if (e.key === 'Enter') loadPack() })
   $('packFilter').addEventListener('input', renderPackJson)

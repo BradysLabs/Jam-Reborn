@@ -1,4 +1,17 @@
 const { app, BrowserWindow, globalShortcut, shell, ipcMain, protocol, net } = require('electron')
+
+// Keep Jam running if something unexpected goes wrong in the main process,
+// and show the error in Jam's console instead of a crash dialog.
+let electronInstance = null
+const reportMainError = (error) => {
+  const message = error && error.message ? error.message : String(error)
+  console.error('Unexpected main process error:', error)
+  try {
+    if (electronInstance) electronInstance.messageWindow('message', { type: 'error', message: `Unexpected error: ${message}. If something stops working, restart Jam.` })
+  } catch (_) {}
+}
+process.on('uncaughtException', reportMainError)
+process.on('unhandledRejection', reportMainError)
 const path = require('path')
 const { fork } = require('child_process')
 const { autoUpdater } = require('electron-updater')
@@ -50,6 +63,7 @@ class Electron {
     this._apiProcess = null
     this._httpLoggerSetup = false
     this._discord = new DiscordPresence()
+    electronInstance = this
     this._setupIPC()
   }
 

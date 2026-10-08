@@ -118,6 +118,11 @@
     .summary > div { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; }
     .summary .v { font-weight: 700; font-family: var(--mono); }
     .summary .k { font-size: 10px; color: var(--muted); text-transform: uppercase; }
+    .pack-results { display: grid; gap: 6px; }
+    .pack-result { display: flex; align-items: center; gap: 10px; padding: 7px 9px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
+    .pack-result > span:first-child { min-width: 130px; font-weight: 600; }
+    .pack-result .pack-active { color: var(--accent); flex: 1; }
+    .pack-result .pack-missing { color: var(--muted); flex: 1; }
 
     #toast { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); background: var(--panel2);
       border: 1px solid var(--border); padding: 6px 12px; border-radius: 6px; font-size: 12px; opacity: 0;
@@ -188,6 +193,25 @@
           <input id="packFilter" type="text" placeholder="Filter entries…" spellcheck="false">
         </div>
         <pre class="json" id="packJson">Load a pack to see its contents.</pre>
+      </div>
+      <div class="card">
+        <h2>Current known packs</h2>
+        <p>Check the known pack catalog against the current game version. This checks only listed packs; it does not scan arbitrary IDs.</p>
+        <div class="row"><button class="btn primary" id="scanPacks">Check known packs</button><span class="hint" id="scanStatus">Uses the current deploy version shown above.</span></div>
+        <div id="activePacks" class="pack-results"></div>
+      </div>
+      <div class="card">
+        <h2>Discover defpacks</h2>
+        <p>Scan a numeric ID range on the current deploy version. Only packs that download and decode successfully are listed. Limit: 300 IDs per scan; requests run a few at a time.</p>
+        <div class="row">
+          <label for="scanStart">ID range</label>
+          <input id="scanStart" type="number" min="1" value="1000" aria-label="First defpack ID">
+          <span>to</span>
+          <input id="scanEnd" type="number" min="1" value="1100" aria-label="Last defpack ID">
+          <button class="btn primary" id="scanRange">Scan range</button>
+        </div>
+        <div class="hint" id="rangeScanStatus">Uses the current deploy version shown above.</div>
+        <div id="rangeScanResults" class="pack-results"></div>
       </div>
     </div>
   </div>

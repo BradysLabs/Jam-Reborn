@@ -1,4 +1,4 @@
-const { readFile, writeFile } = require('fs/promises')
+const { readFile, writeFile, rename, copyFile } = require('fs/promises')
 const { watch, existsSync, writeFileSync } = require('fs')
 const path = require('path')
 const { debounce } = require('lodash')
@@ -52,8 +52,24 @@ module.exports = class Settings {
         }
       }
 
-      const defaults = (await readJson(DEFAULTS_PATH)) || {}
-      let user = await readJson(BASE_PATH)
+      const readJsonSafe = async file => {
+        try {
+          return await readJson(file)
+        } catch (error) {
+          console.error(`Settings file ${path.basename(file)} is damaged (${error.message}).`)
+          return undefined
+        }
+      }
+
+      const defaults = (await readJsonSafe(DEFAULTS_PATH)) || {}
+      let user = await readJsonSafe(BASE_PATH)
+
+      // A damaged settings file (e.g. the PC lost power mid-save) falls back
+      // to the last good copy instead of stopping Jam from starting.
+      if (user === undefined) {
+        user = (await readJsonSafe(`${BASE_PATH}.bak`)) || null
+        if (user) console.error('Restored your settings from the backup copy.')
+      }
 
       if (!user) {
         // First run with settings.local.json: older versions saved everything
@@ -62,6 +78,7 @@ module.exports = class Settings {
         writeFileSync(BASE_PATH, JSON.stringify(user, null, 2))
       }
 
+      this._defaults = defaults
       this.settings = { ...defaults, ...user }
       this._isLoaded = true
       this._watchSettingsFile()
@@ -127,7 +144,14 @@ module.exports = class Settings {
    */
   async _saveSettings () {
     try {
-      await writeFile(BASE_PATH, JSON.stringify(this.settings, null, 2))
+      // Write to a temporary file first, then swap it in, so a crash mid-save
+      // can never leave a half-written settings file. The previous version
+      // is kept as settings.local.json.bak.
+      const temp = `${BASE_PATH}.tmp`
+      await writeFile(temp, JSON.stringify(this.settings, null, 2))
+      await copyFile(BASE_PATH, `${BASE_PATH}.bak`).catch(() => {})
+      await rename(temp, BASE_PATH)
+      this._watchSettingsFile(true)
     } catch (error) {
       console.error(`Failed saving the settings file. ${error.message}`)
     }
@@ -137,14 +161,18 @@ module.exports = class Settings {
    * Watches the settings file for external changes and reloads if necessary
    * @private
    */
-  _watchSettingsFile () {
-    if (this._watching || !existsSync(BASE_PATH)) return
-    this._watching = true
-    watch(BASE_PATH, async (eventType) => {
+  _watchSettingsFile (restart = false) {
+    if (!existsSync(BASE_PATH)) return
+    if (this._watcher) {
+      if (!restart) return
+      try { this._watcher.close() } catch (_) {}
+      this._watcher = null
+    }
+    this._watcher = watch(BASE_PATH, async (eventType) => {
       if (eventType === 'change') {
         try {
           const settings = await readFile(BASE_PATH, 'utf-8')
-          this.settings = JSON.parse(settings)
+          this.settings = { ...(this._defaults || {}), ...JSON.parse(settings) }
         } catch (error) {
           console.error(`Failed reloading the settings file after external change. ${error.message}`)
         }

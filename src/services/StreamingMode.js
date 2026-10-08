@@ -67,6 +67,14 @@ module.exports = class StreamingMode {
     this.realName = null
 
     /**
+     * Every username of yours seen this session (current login, earlier
+     * logins, the game's saved login). All of them are hidden, so switching
+     * accounts never shows a previous account's real name.
+     * @type {Set<string>}
+     */
+    this.knownNames = new Set()
+
+    /**
      * Whether packet swapping is active for the current login. Only turned on
      * at login so the game never sees a mix of real and display names.
      * @type {boolean}
@@ -135,12 +143,20 @@ module.exports = class StreamingMode {
     const saved = StreamingMode.readClientUsername()
     const aliasInNick = new RegExp(`(^|[^A-Za-z0-9])${escapeRegExp(alias)}(?![A-Za-z0-9])`, 'i')
 
+    // The nick is "<username>%<...>%<version>%electron%...": the username is
+    // the first field. The game's saved login can still be the previous
+    // account (it's only updated after a successful login), so the name in
+    // the login itself wins.
+    const loginName = String(nick).split('%')[0].trim()
+    const loginIsAlias = loginName.toLowerCase() === alias.toLowerCase()
+    const loginNameValid = /^[A-Za-z0-9]{3,20}$/.test(loginName)
+
     this.stats = { toClient: 0, toServer: 0 }
     this._maskPattern = null
-    this.nameSource = saved ? 'saved login' : 'login packet'
+    this.nameSource = loginNameValid && !loginIsAlias ? 'login packet' : 'saved login'
     this.nickMatchesSaved = saved ? nick.toLowerCase().includes(saved.toLowerCase()) : null
 
-    if (aliasInNick.test(nick) && !(saved && nick.toLowerCase().includes(saved.toLowerCase()))) {
+    if (aliasInNick.test(nick) && (loginIsAlias || !loginNameValid)) {
       // The game logged in with the display name: swap the real name back in.
       if (!saved) {
         this.realName = null
@@ -153,15 +169,19 @@ module.exports = class StreamingMode {
       }
 
       this.realName = saved
+      this._remember(saved)
       // The game already uses the display name, so swapping must stay on
       // for this login even if streaming mode was turned off in the meantime.
       this.sessionActive = true
       const fixedNick = nick.replace(new RegExp(aliasInNick.source, 'gi'), (_, before) => `${before}${saved}`)
       packet = packet.replace(nickPattern, (_, before, __, after) => `${before}${fixedNick}${after}`)
     } else {
-      this.realName = saved || nick
-      this.sessionActive = this.enabled && this.realName.toLowerCase() !== alias.toLowerCase()
+      this.realName = loginNameValid ? loginName : saved
+      this.sessionActive = Boolean(this.realName) && this.enabled && this.realName.toLowerCase() !== alias.toLowerCase()
     }
+
+    this._remember(this.realName)
+    if (saved && saved.toLowerCase() !== alias.toLowerCase()) this._remember(saved)
 
     if (this.sessionActive) {
       this._application.consoleMessage({
@@ -189,15 +209,28 @@ module.exports = class StreamingMode {
   }
 
   /**
+   * Adds a username to the set of names to hide.
+   * @param {string} name
+   * @private
+   */
+  _remember (name) {
+    if (typeof name !== 'string' || !/^[A-Za-z0-9]{3,20}$/.test(name)) return
+    const before = this.knownNames.size
+    this.knownNames.add(name.toLowerCase())
+    if (this.knownNames.size !== before) this._maskPattern = null
+  }
+
+  /**
    * Regex matching the real name (and "den" + real name) as a whole word.
    * @returns {RegExp|null}
    * @private
    */
   _pattern () {
-    if (!this.realName) return null
+    if (!this.knownNames.size) return null
     if (!this._maskPattern) {
+      const names = [...this.knownNames].sort((a, b) => b.length - a.length).map(escapeRegExp).join('|')
       this._maskPattern = new RegExp(
-        `(^|[^A-Za-z0-9])(den)?${escapeRegExp(this.realName)}(?![A-Za-z0-9])`,
+        `(^|[^A-Za-z0-9])(den)?(?:${names})(?![A-Za-z0-9])`,
         'gi'
       )
     }
@@ -272,6 +305,7 @@ module.exports = class StreamingMode {
       `display name: ${this.alias}`,
       `swapping this login: ${this.sessionActive ? 'yes' : 'no'}`,
       `real name known: ${this.realName ? `yes (from ${this.nameSource})` : 'no'}`,
+      `names hidden: ${this.knownNames.size}`,
       `login matches saved name: ${this.nickMatchesSaved === null || this.nickMatchesSaved === undefined ? 'n/a' : (this.nickMatchesSaved ? 'yes' : 'no')}`,
       `packets swapped to game: ${this.stats.toClient}`,
       `to server: ${this.stats.toServer}`

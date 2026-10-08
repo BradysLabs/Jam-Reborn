@@ -230,6 +230,28 @@ console.log = (message) => {
   })
 }
 
+/**
+ * Any unexpected error in Jam's window shows in the console instead of
+ * silently breaking something. Repeats of the same error are shown once a minute.
+ */
+const reportedErrors = new Map()
+const reportUnexpectedError = (message) => {
+  try {
+    const now = Date.now()
+    if (now - (reportedErrors.get(message) || 0) < 60000) return
+    reportedErrors.set(message, now)
+    application.consoleMessage({ type: 'error', message: `Unexpected error: ${message}` })
+  } catch (_) { /* never let error reporting cause more errors */ }
+}
+window.addEventListener('error', (event) => {
+  const where = event.filename ? ` (${event.filename.split(/[\\/]/).pop()}:${event.lineno})` : ''
+  reportUnexpectedError(`${event.message || 'Unknown error'}${where}`)
+})
+window.addEventListener('unhandledrejection', (event) => {
+  const reason = event.reason
+  reportUnexpectedError(reason && reason.message ? reason.message : String(reason))
+})
+
 initializeApp()
 setupIpcEvents()
 setupAppEvents()

@@ -1,9 +1,0 @@
-{
-  "name": "Packet Replay",
-  "description": "Save, explain, and re-send packets. Build your own packet library.",
-  "category": "Tools",
-  "icon": "fa-redo",
-  "author": "BradysLabs",
-  "main": "index.html",
-  "type": "ui"
-}

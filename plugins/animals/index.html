@@ -418,9 +418,13 @@
     }
 
     .packet {
+      display: block;
+      box-sizing: border-box;
+      width: 100%;
       padding: 11px;
 
       min-height: 45px;
+      resize: vertical;
 
       background: #0b0e14;
 
@@ -726,14 +730,20 @@
       </h2>
 
       <div class="packet-label">
-        Purchase request
+        Editable purchase request
       </div>
 
-      <div
+      <textarea
         id="packet"
         class="packet"
+        rows="3"
+        spellcheck="false"
+        aria-label="Editable animal purchase packet"
       >
-        Select an animal to generate the packet.
+      </textarea>
+
+      <div id="packetHelp" class="hint">
+        Make a normal animal purchase in the game first so Animal Buyer can capture the current request fields.
       </div>
 
     </section>

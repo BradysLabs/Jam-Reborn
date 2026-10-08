@@ -467,18 +467,20 @@
 
       $menuButton.on('click', toggleSidebar)
 
+      // Whether a packet row passes the In/Out filter and the search box.
+      function packetRowMatches(el) {
+        const isIncoming = el.querySelector('.fa-arrow-down') !== null
+        const directionOk = currentFilter === 'all' || (currentFilter === 'incoming') === isIncoming
+        if (!directionOk) return false
+        const query = ($packetSearch.val() || '').toLowerCase()
+        return !query || el.textContent.toLowerCase().includes(query)
+      }
+
       function applyFilter() {
-        const $packets = $messageLog.children('div')
-        $packets.each(function () {
-          const $this = $(this)
-          const isIncoming = $this.find('.fa-arrow-down').length > 0
-          const isOutgoing = $this.find('.fa-arrow-up').length > 0
-          $this.toggle(
-            currentFilter === 'all' ||
-            (currentFilter === 'incoming' && isIncoming) ||
-            (currentFilter === 'outgoing' && isOutgoing)
-          )
-        })
+        const rows = $messageLog[0].children
+        for (let i = 0; i < rows.length; i++) {
+          rows[i].style.display = packetRowMatches(rows[i]) ? '' : 'none'
+        }
       }
 
       function openTab(tabId) {
@@ -509,11 +511,10 @@
         openTab($(this).data('tab'))
       })
 
+      let searchTimer = null
       $packetSearch.on('input', function () {
-        const query = $(this).val().toLowerCase()
-        $messageLog.children('div').each(function () {
-          $(this).toggle($(this).text().toLowerCase().includes(query))
-        })
+        clearTimeout(searchTimer)
+        searchTimer = setTimeout(applyFilter, 150)
       })
 
       $('#filterAllButton, #filterIncomingButton, #filterOutgoingButton').on('click', function () {
@@ -637,6 +638,7 @@
       }
 
       window.applyFilter = applyFilter
+      window.packetRowMatches = packetRowMatches
       window.openTab = openTab
       window.applyHttpFilter = applyHttpFilter
     })

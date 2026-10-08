@@ -50,23 +50,16 @@ Your page gets a `jam` object (as `window.jam`) with:
 | `jam.application` | The app: `consoleMessage()`, settings, item names (`jam.application.items`). |
 | `jam.onPacket(fn)` | Watch every packet. Stops automatically when your window closes. |
 
-Use Jam's look by including its stylesheet and header:
+Jam's stylesheet is added to every plugin window automatically. For the helpers below, you can also include:
 
 ```html
-<link href="app://assets/styles/style.css" rel="stylesheet">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
-...
 <script src="app://assets/scripts/plugin-utils.js"></script>
-<script>document.addEventListener('DOMContentLoaded', () => initializePluginUI())</script>
 ```
 
-`jam` is set right after your window opens, so if your script runs very early, wait for it:
+`jam` is set right after your window opens, so if your script runs very early, wait for it. With `plugin-utils.js` included that's one line:
 
 ```js
-async function waitForJam () {
-  while (!window.jam) await new Promise(resolve => setTimeout(resolve, 50))
-  return window.jam
-}
+const jam = await waitForJam()
 ```
 
 ## Background plugins

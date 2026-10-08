@@ -43,7 +43,7 @@ Each plugin's page in this guide tells you which kind it is and how to use it.
 **Settings → Appearance** has full themes (Dark, Midnight, Slate, Void, Light) and accent colors.
 
 ## Learning how the game talks
-Open **Packet Inspector** to watch traffic live with plain-English explanations. **Packet Replay** lets you save packets, see them explained, and test them.
+Open **Packet Inspector** to watch traffic live with plain-English explanations, category filters, packet comparison and a built-in packet guide.
 
 ## Play fair and stay safe
 - Plugins that send packets can get an account kicked or banned if they send something the server doesn't expect. Only use plugins you trust.
