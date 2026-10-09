@@ -1,5 +1,10 @@
 /*
- * Adventures - runs Animal Jam adventures step by step.
+ * Adventures - joins another player's Animal Jam adventure and runs it
+ * step by step.
+ *
+ * Joining: %xt%o%qj%{room}%den<host>%<questId>%<hard 1/0>%0%
+ * Server:  %xt%qj%{room}%<1 joined / 0 refused>%...
+ * The host starts the game; we follow them into the adventure room.
  *
  * Adventures are defined in ./adventures/<name>/index.js (one folder each)
  * and listed in ./adventures.
@@ -38,6 +43,10 @@ const STEP_DELAY = 1200;
 const PICKUP_DELAY = 700;
 const CREATE_DELAY = 2500;
 const ROOM_WAIT_TIMEOUT = 10000;
+const JOIN_REPLY_TIMEOUT = 6000;
+const HOST_START_TIMEOUT = 10 * 60 * 1000;  // how long to wait for the host to press Start
+const REJOIN_RETRY_DELAY = 5000;            // looping: retry joining until the host opens a new game
+const REJOIN_TIMEOUT = 5 * 60 * 1000;
 const ROOM_SETTLE_DELAY = 1500;
 const PRIZE_SCREEN_TIMEOUT = 15000;
 const MANUAL_PICK_TIMEOUT = 60000;
@@ -61,6 +70,10 @@ const loopRunsInput = $('loopRuns');
 const loopDelayInput = $('loopDelay');
 const prizeChoice = $('prizeChoice');
 const runCounterEl = $('runCounter');
+const hostInput = $('hostName');
+
+const HOST_KEY = 'adventures.hostName';
+try { if (hostInput) hostInput.value = localStorage.getItem(HOST_KEY) || ''; } catch (e) { /* storage unavailable */ }
 
 
 // ============================================================
@@ -72,8 +85,7 @@ let mode = selected ? selected.modes[0] : null;
 
 let running = false;
 let playerId = null;
-let lastJoinedRoomName = null;
-let joinReply = null;      // server's answer to the adventure request
+let joinReply = null;       // server's answer to our join request
 let prizeOffered = false;   // server opened the prize screen this run
 let prizeClaimed = false;   // a prize was claimed this run
 const activeObjects = new Set();
@@ -137,57 +149,12 @@ function setStatus(message) {
   }
 }
 
-// Name of the den you're standing in (e.g. "denYourName"), or null.
-async function findDenName() {
-  const denPattern = /(?:^|[^A-Za-z0-9_])(den[A-Za-z0-9]+)/;
-  const seen = {};
-
-  for (const key of ['room', 'roomName', 'currentRoom']) {
-    try {
-      const value = await dispatch.getState(key);
-      if (value === undefined || value === null) continue;
-
-      const text = typeof value === 'string' ? value : JSON.stringify(value);
-      seen[key] = text;
-
-      const match = text.match(denPattern);
-      if (match) return match[1];
-    } catch (error) { /* key not available */ }
-  }
-
-  // Fallback 1: the last room the server told us we joined.
-  if (lastJoinedRoomName && denPattern.test(lastJoinedRoomName)) {
-    return lastJoinedRoomName.match(denPattern)[1];
-  }
-
-  // Fallback 2: dens are named "den" + username.
-  const username = await findUsername(seen);
-  if (username) return `den${username}`;
-
-  log('warn', `Couldn't find a den name. Room info from Jam: ${JSON.stringify(seen)} | last joined: ${lastJoinedRoomName}`);
-  return null;
-}
-
-async function findUsername(seen = {}) {
-  for (const key of ['player', 'username', 'userName', 'user', 'account']) {
-    try {
-      const value = await dispatch.getState(key);
-      if (value === undefined || value === null) continue;
-
-      if (typeof value === 'string') {
-        seen[key] = value;
-        if (/^[A-Za-z0-9]{3,}$/.test(value)) return value;
-        continue;
-      }
-
-      seen[key] = JSON.stringify(value).slice(0, 200);
-      const name =
-        value.username ?? value.userName ?? value.user_name ??
-        value.screenName ?? value.name ?? value.nickname;
-      if (typeof name === 'string' && /^[A-Za-z0-9]{3,}$/.test(name)) return name;
-    } catch (error) { /* key not available */ }
-  }
-  return null;
+// Den name of the host to join, from the "Host" box. Accepts "name" or "denName".
+function hostDen() {
+  const raw = String(hostInput ? hostInput.value : '').trim().replace(/^den/i, '');
+  if (!/^[A-Za-z0-9]{3,20}$/.test(raw)) return null;
+  try { localStorage.setItem(HOST_KEY, raw); } catch (e) { /* storage unavailable */ }
+  return { name: raw, den: `den${raw.toLowerCase()}` };
 }
 
 async function refreshRoom() {
@@ -232,14 +199,8 @@ function handleIncoming(message) {
     return;
   }
 
-  // Room joined: %xt%rj%<oldRoom>%1%<roomName>%<newRoom>%...
-  if (command === 'rj' && parts[5]) {
-    lastJoinedRoomName = parts[5];
-    return;
-  }
-
-  // Answer to the adventure request: %xt%qjc%<room>%<1 ok / 0 refused>%<reason or details>%
-  if (command === 'qjc') {
+  // Answer to our join request: %xt%qj%<room>%<1 joined / 0 refused>%<reason or details>%...
+  if (command === 'qj') {
     joinReply = { ok: parts[4] === '1', reason: parts[5] || '' };
     return;
   }
@@ -266,7 +227,7 @@ function setupListeners() {
   let hooked = false;
 
   if (dispatch && typeof dispatch.onMessage === 'function') {
-    for (const message of ['qw', 'qcmd', 'rj', 'qjc', 'qpgift', 'il']) {
+    for (const message of ['qw', 'qcmd', 'qj', 'qpgift', 'il']) {
       try {
         dispatch.onMessage({
           type: 'aj',
@@ -358,8 +319,8 @@ function makeContext(adventure) {
   return ctx;
 }
 
-async function waitForRoomChange(previousRoom) {
-  const deadline = Date.now() + ROOM_WAIT_TIMEOUT;
+async function waitForRoomChange(previousRoom, timeout = ROOM_WAIT_TIMEOUT) {
+  const deadline = Date.now() + timeout;
 
   while (Date.now() < deadline) {
     await sleep(250);
@@ -390,10 +351,11 @@ async function startRun() {
   if (running || !selected) return;
 
   const adventure = selected;
-  const den = await findDenName();
+  const host = hostDen();
 
-  if (!den) {
-    setStatus('Go to your den first, then press Start.');
+  if (!host) {
+    setStatus('Type the username of the player whose adventure you want to join.');
+    if (hostInput) hostInput.focus();
     return;
   }
 
@@ -401,7 +363,7 @@ async function startRun() {
   const totalRuns = looping ? readInt(loopRunsInput, 0) : 1;   // 0 = until stopped
   const delayMs = readInt(loopDelayInput, 5) * 1000;
 
-  log('info', `Starting from ${den}` + (looping ? ` (loop: ${totalRuns || 'until stopped'})` : ''));
+  log('info', `Joining ${host.name}'s ${adventure.name}` + (looping ? ` (loop: ${totalRuns || 'until stopped'})` : ''));
 
   running = true;
   setRunningUI(true);
@@ -413,7 +375,7 @@ async function startRun() {
       if (!running) throw new Stopped();
       setRunCounter(looping ? `Run ${run}${totalRuns ? ` / ${totalRuns}` : ''} · ${completed} done` : '');
 
-      await runOnce(adventure, den, looping);
+      await runOnce(adventure, host, looping, run > 1);
       completed++;
 
       if (!looping || (totalRuns && run >= totalRuns)) break;
@@ -443,7 +405,7 @@ async function startRun() {
   }
 }
 
-async function runOnce(adventure, den, leaveAfter) {
+async function runOnce(adventure, host, leaveAfter, isRejoin) {
   activeObjects.clear();
   prizeOffered = false;
   prizeClaimed = false;
@@ -453,16 +415,15 @@ async function runOnce(adventure, den, leaveAfter) {
   let stepIndex = -1;
 
   try {
-    // ---------- Create + start ----------
-    setStatus(`Starting ${adventure.name} (${mode})...`);
-    const hardFlag = mode === 'hard' ? 1 : 0;
+    // ---------- Join the host's game ----------
+    // Note the room before joining, so a quick Start by the host isn't missed.
+    const lobbyRoom = await refreshRoom();
+    await joinHost(ctx, adventure, host, isRejoin);
 
-    const denRoom = await refreshRoom();
-    joinReply = null;
-    await ctx.send(`%xt%o%qjc%{room}%${den}%${adventure.questId}%${hardFlag}%`, 0);
-    await waitForJoinReply();
-    await ctx.send(`%xt%o%qs%{room}%${den}%`, 0);
-    await waitForRoomChange(denRoom);
+    // ---------- Wait for the host to start ----------
+    setStatus(`Joined ${host.name}'s game. Waiting for them to start...`);
+    await waitForRoomChange(lobbyRoom, HOST_START_TIMEOUT);
+    log('ok', 'Adventure started.');
     await ctx.send('%xt%o%qmi%{room}%');
     if (adventure.afterStart) await adventure.afterStart(ctx);
 
@@ -504,25 +465,41 @@ const JOIN_ERRORS = {
   NLVL: 'Your level is too low for this adventure (or for hard mode).'
 };
 
-async function waitForJoinReply() {
-  const deadline = Date.now() + CREATE_DELAY + 3000;
-  while (!joinReply && Date.now() < deadline) {
-    await sleep(100);
-    if (!running) throw new Stopped();
-  }
+// Errors that won't fix themselves by retrying.
+const FATAL_JOIN_ERRORS = new Set(Object.keys(JOIN_ERRORS));
 
-  if (!joinReply) {
-    // No answer seen (listener may not be hooked) - carry on as before.
-    await sleep(CREATE_DELAY);
-    return;
-  }
+async function joinHost(ctx, adventure, host, isRejoin) {
+  const hardFlag = mode === 'hard' ? 1 : 0;
+  const retryUntil = Date.now() + (isRejoin ? REJOIN_TIMEOUT : 0);
 
-  if (!joinReply.ok) {
-    const reason = joinReply.reason;
-    throw new Error(JOIN_ERRORS[reason] || `The game refused to start the adventure (reason: ${reason || 'unknown'}).`);
-  }
+  for (let attempt = 1; ; attempt++) {
+    setStatus(attempt === 1
+      ? `Joining ${host.name}'s ${adventure.name} (${mode})...`
+      : `Waiting for ${host.name} to open a new game (try ${attempt})...`);
 
-  await sleep(500);
+    joinReply = null;
+    await ctx.send(`%xt%o%qj%{room}%${host.den}%${adventure.questId}%${hardFlag}%0%`, 0);
+
+    const deadline = Date.now() + JOIN_REPLY_TIMEOUT;
+    while (!joinReply && Date.now() < deadline) await ctx.wait(100);
+
+    if (joinReply && joinReply.ok) {
+      log('ok', `Joined ${host.name}'s game.`);
+      return;
+    }
+
+    const reason = joinReply ? joinReply.reason : '';
+    const message = !joinReply
+      ? 'No answer from the game to the join request.'
+      : JOIN_ERRORS[reason] || `Couldn't join ${host.name}'s game (reason: ${reason || 'unknown'}). Check they've opened a ${adventure.name} game in ${mode} mode and it isn't full or started.`;
+
+    if (FATAL_JOIN_ERRORS.has(reason) || Date.now() + REJOIN_RETRY_DELAY > retryUntil) {
+      throw new Error(message);
+    }
+
+    log('warn', message);
+    await ctx.wait(REJOIN_RETRY_DELAY);
+  }
 }
 
 async function handlePrize(ctx) {
@@ -662,7 +639,7 @@ function markStep(index, state) {
 function setRunningUI(isRunning) {
   startButton.disabled = isRunning || !selected;
   stopButton.disabled = !isRunning;
-  for (const input of [loopToggle, loopRunsInput, loopDelayInput, prizeChoice]) {
+  for (const input of [hostInput, loopToggle, loopRunsInput, loopDelayInput, prizeChoice]) {
     if (input) input.disabled = isRunning;
   }
   renderAdventureList();
@@ -682,6 +659,7 @@ function renderAll() {
 // ============================================================
 
 startButton.addEventListener('click', () => { startRun(); });
+if (hostInput) hostInput.addEventListener('keydown', event => { if (event.key === 'Enter') startRun(); });
 stopButton.addEventListener('click', () => { stopRun(); });
 
 setupListeners();

@@ -136,6 +136,27 @@
       font: inherit;
     }
 
+    .ar-host {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .ar-host input {
+      flex: 1;
+      min-width: 0;
+      padding: 5px 8px;
+      border-radius: 4px;
+      border: 1px solid #4b4f63;
+      background: #2a2c38;
+      color: inherit;
+      font: inherit;
+    }
+
+    .ar-host input:focus { outline: none; border-color: #3b82f6; }
+
+    .ar-hint { font-size: .65rem; opacity: .6; }
+
     .ar-counter {
       margin-left: auto;
       opacity: .7;
@@ -207,9 +228,17 @@
         <div id="adventureList" class="ar-list"></div>
       </div>
 
+      <div>
+        <div class="ar-section-title">Join</div>
+        <div class="ar-host">
+          <input id="hostName" type="text" placeholder="Host's username" autocomplete="off" spellcheck="false" aria-label="Username of the player hosting the adventure" maxlength="23">
+        </div>
+        <div class="ar-hint">They open the adventure from their den; you join, they press Start. Pick the same mode they chose.</div>
+      </div>
+
       <div class="ar-controls">
         <div id="modeToggle" class="ar-mode"></div>
-        <button id="startButton" class="ar-btn ar-start"><i class="fas fa-play"></i> Start</button>
+        <button id="startButton" class="ar-btn ar-start"><i class="fas fa-sign-in-alt"></i> Join</button>
         <button id="stopButton" class="ar-btn ar-stop" disabled><i class="fas fa-stop"></i> Stop</button>
       </div>
 
@@ -242,7 +271,7 @@
         <div id="stepList" class="ar-steps"></div>
       </div>
 
-      <div id="status" class="ar-status">Go to your den, pick an adventure and press Start.</div>
+      <div id="status" class="ar-status">Pick an adventure, type the host's username and press Join.</div>
 
       <div id="log" class="ar-log"></div>
     </div>

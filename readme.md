@@ -13,6 +13,11 @@ Jam Reborn sits between Animal Jam Classic and the game server, so plugins can r
 
 **Unofficial community fork.** Jam Reborn is a community-maintained continuation of Jam. It is not affiliated with or endorsed by WildWorks or Animal Jam. See [Disclaimer](#disclaimer).
 
+## What's new in 6.3.1
+
+* **Item Previewer.** Try on any clothing item in any of its colors. Only you can see it: the item is shown by your own game and nothing is sent to the server. Preview items show up in your inventory, can be put on and taken off from the game like real items, and stay on when you change rooms.
+* **Adventures now joins games.** Instead of hosting from your den, type a player's username and join their adventure. The plugin follows them in when they start and runs the objectives. With looping on, it rejoins the same host for the next run and waits for them to open a new game.
+
 ## What's new in 6.2.0
 
 * **Plugin Hub.** A searchable page for every plugin, grouped into categories. Star the ones you use and they're pinned to the sidebar, so there's no more endless plugin list.
@@ -43,15 +48,18 @@ Jam Reborn sits between Animal Jam Classic and the game server, so plugins can r
 |---|---|---|
 | Asset Browser | Window | Browse every item, the game's data files and their addresses |
 | Masterpiece Studio | Window | Turn a picture into a masterpiece file, or open one |
-| Adventures | Window | Play adventures step by step, with looping and prize picking |
+| Adventures | Window | Join a player's adventure and play it step by step, with looping and prize picking |
 | Pairs | Window | Helper for the Pairs minigame |
 | Name Checker | Window | Find usernames that are still free to create |
 | Glow Picker | Window | Pick your glow color from presets or RGB, or run color swaps |
 | Room Browser | Window | Search and warp to any public room |
 | Packet Inspector | Window | Live packet viewer with filters, a packet guide and comparison |
-| Packet Replay | Window | Save, explain, and send packets |
+| Item Previewer | Window | Try on any clothing item in any color, visible only to you |
+| Animal Buyer | Window | Browse animals and buy one using a captured in-game request |
+| Pet Catalog | Window | Browse pets and buy one using a captured in-game request |
+| Dual Session Launcher | Window | Open the official AJ Classic client alongside Jam |
 | Membership | Command | Shows the game as a member on your screen only |
-| Achievements | Command | Gives your character most in-game achievements |
+| Achievements | Window | Send in-game achievements one at a time or all at once |
 | Packet Spammer | Window | Send packets repeatedly |
 
 ## Writing plugins

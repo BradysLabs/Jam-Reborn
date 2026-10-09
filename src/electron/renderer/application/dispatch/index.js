@@ -25,6 +25,7 @@ const BUNDLED_PLUGINS = new Set([
   'adventure-runner',
   'asset-browser',
   'glow-picker',
+  'item-previewer',
   'masterpiece',
   'membership',
   'name-checker',
