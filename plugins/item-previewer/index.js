@@ -1,23 +1,24 @@
 /*
  * Item Previewer - try on any clothing item, on your screen only.
  *
- * How it works (from real captures): the server tells the game about your
- * clothing with "il":
+ * How it works (from real captures):
  *
- *   added:   %xt%il%-1%2%1%<animal>%<username>%<COLOR>%1%0%<slot>%<item id>%
- *   changed: %xt%il%-1%3%0%<animal>%<username>%0%<count>%  + per item:
- *              put on:   1%<slot>%<item id>%<slot it replaced>%
- *              take off: 0%<slot>%<item id>%
+ *   you send   %xt%o%iu%<room>%<# put on>%<# taken off>%<slots put on...>%<slots taken off...>%
+ *   server     %xt%il%-1%3%0%<animal>%<username>%0%<# put on>%<# taken off>%
+ *                  <slot>%<item id>% for each item put on, then <slot>% for each taken off
+ *   e.g. put on slot 3:   iu ...%1%0%3%   ->  il ...%0%1%0%3%393%
+ *        take off slot 3: iu ...%0%1%3%   ->  il ...%0%0%1%3%
  *
- * COLOR is the item's packed color value - one of the values in the item's
- * "colors" field in the clothing data (pack 1000), e.g. Necklace color 1 =
- * 5580347. The color is only ever sent when the item is added.
+ *   added to inventory (after buying):
+ *              %xt%il%-1%2%1%<animal>%<username>%<COLOR>%1%0%<slot>%<item id>%
+ *   COLOR is one of the packed values in the item's "colors" field in the
+ *   clothing data (pack 1000), e.g. Necklace color 1 = 5580347.
  *
- * We send the game our own "added" (with a made-up inventory slot and the
- * chosen color) and then a "changed" that puts it on. Nothing goes to the
- * server. When you put a preview item on / take it off in the game, the
- * "iu" is cleaned of preview slots here and answered locally, so the
- * server never sees a slot it doesn't know.
+ * We send the game our own "added" (made-up inventory slot, chosen color)
+ * and then an update that puts it on. Nothing goes to the server. When you
+ * put a preview on / take it off in the game, the "iu" is cleaned of
+ * preview slots here and answered locally, so the server never sees a slot
+ * it doesn't know.
  */
 (async function () {
   // Preview items use slots far above any real inventory slot.
@@ -32,6 +33,7 @@
   const statusEl = $('status')
   const dotEl = $('dot')
   const colorEl = $('color')
+  const inventoryNumberEl = $('inventoryNumber')
   const previewBtn = $('preview')
   const activeEl = $('active')
   const removeAllBtn = $('removeAll')
@@ -84,16 +86,14 @@
     renderSelected()
   }
 
-  function itemFields (e) {
-    // The last field of "put on" is the slot it replaced; 0 = nothing.
-    return e.worn ? [1, e.slot, e.id, e.replaces || 0] : [0, e.slot, e.id]
-  }
-
   // Puts preview items on / takes them off, on your game only.
   function sendToGame (entries) {
     if (!me) throw new Error('Your animal isn\'t known yet.')
-    const fields = ['', 'xt', 'il', -1, 3, 0, me.animal, me.username, 0, entries.length]
-    entries.forEach(e => fields.push(...itemFields(e)))
+    const on = entries.filter(e => e.worn)
+    const off = entries.filter(e => !e.worn)
+    const fields = ['', 'xt', 'il', -1, 3, 0, me.animal, me.username, 0, on.length, off.length]
+    on.forEach(e => fields.push(e.slot, e.id))
+    off.forEach(e => fields.push(e.slot))
     dispatch.sendConnectionMessage(fields.join('%') + '%')
   }
 
@@ -128,17 +128,17 @@
 
   // Putting on / taking off. Preview slots are handled here; real ones go
   // through to the server.
-  //   %xt%o%iu%<room>%<?>%<number put on>%<slots put on...>%<slots taken off...>%
-  //   e.g. %xt%o%iu%3588075%1%1%6%5%  = put on slot 6, take off slot 5
+  //   %xt%o%iu%<room>%<# put on>%<# taken off>%<slots put on...>%<slots taken off...>%
   dispatch.onMessage({
     type: 'connection',
     message: 'iu',
     callback: ({ message }) => {
       const parts = message.value
       const end = parts[parts.length - 1] === '' ? parts.length - 1 : parts.length
-      const count = parseInt(parts[6], 10) || 0
-      const putOn = parts.slice(7, 7 + count).map(Number)
-      const takenOff = parts.slice(7 + count, end).map(Number)
+      const onCount = parseInt(parts[5], 10) || 0
+      const offCount = parseInt(parts[6], 10) || 0
+      const putOn = parts.slice(7, 7 + onCount).map(Number)
+      const takenOff = parts.slice(7 + onCount, Math.min(end, 7 + onCount + offCount)).map(Number)
       const isPreview = slot => previews.has(slot)
 
       if (!putOn.concat(takenOff).some(isPreview)) {
@@ -151,7 +151,6 @@
       putOn.filter(isPreview).forEach(slot => {
         const p = previews.get(slot)
         p.worn = true
-        p.replaces = takenOff[0] || 0
         changed.push(p)
       })
       takenOff.filter(isPreview).forEach(slot => {
@@ -165,7 +164,7 @@
       const realOn = putOn.filter(slot => !isPreview(slot))
       const realOff = takenOff.filter(slot => !isPreview(slot))
       if (realOn.length || realOff.length) {
-        message.value = [...parts.slice(0, 6), realOn.length, ...realOn, ...realOff, '']
+        message.value = [...parts.slice(0, 5), realOn.length, realOff.length, ...realOn, ...realOff, '']
         lastOwnWear = Date.now()
       } else {
         message.send = false
@@ -175,21 +174,6 @@
     }
   })
 
-  // Never let a preview item reach the server through recycling or trading.
-  const blockIfPreview = (name, slotIndexes, what) => dispatch.onMessage({
-    type: 'connection',
-    message: name,
-    callback: ({ message }) => {
-      const parts = message.value
-      const indexes = slotIndexes || parts.map((_, i) => i).slice(4)
-      if (indexes.some(i => previews.has(Number(parts[i])))) {
-        message.send = false
-        setStatus(`Preview items can't be ${what}.`, 'warn')
-      }
-    }
-  })
-  blockIfPreview('ir', [5], 'recycled')
-  blockIfPreview('ts', null, 'traded')
 
   // Changing rooms shows your real outfit again; put previews back on.
   dispatch.onMessage({
@@ -209,9 +193,15 @@
 
   function tryOn () {
     if (!selected) return
+    const inventoryNumber = Number(inventoryNumberEl.value)
+    if (!Number.isInteger(inventoryNumber) || inventoryNumber < 1 || inventoryNumber > 1000) {
+      setStatus('Enter this item’s inventory number (1–1000) to label the preview.', 'warn')
+      inventoryNumberEl.focus()
+      return
+    }
     const option = Math.max(0, parseInt(colorEl.value, 10) || 0)
     const colorValue = selectedColors.length ? selectedColors[Math.min(option, selectedColors.length - 1)] : 0
-    const preview = { slot: nextSlot++, id: selected.id, name: selected.name, color: option + 1, colorValue, worn: true }
+    const preview = { slot: nextSlot++, id: selected.id, name: selected.name, inventoryNumber, color: option + 1, colorValue, worn: true }
     try {
       addToGame(preview)
       sendToGame([preview])
@@ -367,7 +357,7 @@
     }
     activeEl.innerHTML = all.map(p => `
       <div class="active-row">
-        <span class="name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
+        <span class="name" title="Inventory #${p.inventoryNumber}: ${escapeHtml(p.name)}">#${p.inventoryNumber} · ${escapeHtml(p.name)}</span>
         <span class="state${p.worn ? ' on' : ''}">${p.worn ? 'wearing' : 'off'} · color ${p.color}</span>
         <button class="btn small" data-slot="${p.slot}" data-worn="${p.worn ? 0 : 1}">${p.worn ? 'Take off' : 'Put on'}</button>
       </div>`).join('')

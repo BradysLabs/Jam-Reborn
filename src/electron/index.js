@@ -298,31 +298,31 @@ class Electron {
   }
 
   _onReady () {
-    this._initDiscordPresence()
-    this._window = new BrowserWindow(defaultWindowOptions)
-    this._window.loadFile(path.join(__dirname, 'renderer', 'index.html'))
-    this._window.webContents.setWindowOpenHandler((details) => this._createWindow(details))
-
-    protocol.handle('app', (request) => {
-      const url = request.url.slice('app://'.length)
-      let filePath
-
-      if (app.isPackaged) {
-        filePath = path.join(process.resourcesPath, url)
-      } else {
-        filePath = path.normalize(`${__dirname}/../../${url}`)
-      }
-
-      return net.fetch(`file://${filePath}`)
+    // Jam Reborn 6.4.0 is the last version. It only shows where to get JR:
+    // the proxy, plugins and game no longer start.
+    this._window = new BrowserWindow({
+      title: 'Jam Reborn has moved to JR',
+      backgroundColor: '#0b0b0c',
+      width: 720,
+      height: 560,
+      resizable: false,
+      maximizable: false,
+      frame: false,
+      icon: path.join('assets', 'icon.png'),
+      webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true }
     })
+    this._window.setMenu(null)
+    this._window.loadFile(path.join(__dirname, 'sunset.html'))
+    // Buttons open in the user's browser.
+    this._window.webContents.setWindowOpenHandler(({ url }) => {
+      if (/^https:\/\/(github\.com|discord\.gg)\//.test(url)) shell.openExternal(url)
+      return { action: 'deny' }
+    })
+    this._window.webContents.on('will-navigate', (e) => e.preventDefault())
 
-    this._startApiProcess()
-
-    this._window.webContents.on('did-finish-load', () => this._setupHttpLogger())
-    this._registerShortcut('F11', () => this._window.webContents.openDevTools())
-
+    // Still check quietly, in case a fix for this screen is ever needed.
     if (!isDevelopment) {
-      this._initAutoUpdater()
+      try { autoUpdater.checkForUpdates().catch(() => {}) } catch (_) {}
     }
   }
 }

@@ -1,3 +1,4 @@
 module.exports = [
-  require('./phantoms')
+  require('./phantoms'),
+  require('./bittersweets')
 ];

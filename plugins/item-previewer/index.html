@@ -53,7 +53,7 @@
     #selName { font-size: 14px; font-weight: 700; }
     #selMeta { color: var(--muted); font-family: Consolas, "SF Mono", monospace; font-size: 10px; }
     .field { display: flex; align-items: center; gap: 8px; }
-    .field label { color: var(--muted); width: 48px; }
+    .field label { color: var(--muted); width: 108px; }
     .field input { width: 90px; height: 28px; padding: 0 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; outline: none; font-family: Consolas, monospace; }
     .field input:focus { border-color: var(--accent); }
     .hint { color: var(--muted); font-size: 10px; line-height: 1.5; }
@@ -109,6 +109,11 @@
           <label for="color" title="Color option (0 = first color)">Option</label>
           <input id="color" type="number" min="0" value="0" aria-label="Item color number">
         </div>
+        <div class="field">
+          <label for="inventoryNumber" title="Your account-specific position in the inventory">Inventory #</label>
+          <input id="inventoryNumber" type="number" min="1" max="1000" step="1" placeholder="1–1000" aria-label="Your inventory item number">
+        </div>
+        <div class="hint">Choose this item's number in your own inventory. This labels the preview; the plugin still uses a separate temporary slot.</div>
         <button id="preview" class="btn primary" type="button" disabled>Try it on</button>
         <div class="hint">The item is added to your inventory and put on your animal on your screen only. Nobody else sees it and the server never hears about it.</div>
       </div>

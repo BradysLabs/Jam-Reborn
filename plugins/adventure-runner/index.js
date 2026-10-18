@@ -65,6 +65,7 @@ const statusEl = $('status');
 const logEl = $('log');
 const startButton = $('startButton');
 const stopButton = $('stopButton');
+const hereButton = $('hereButton');
 const loopToggle = $('loopToggle');
 const loopRunsInput = $('loopRuns');
 const loopDelayInput = $('loopDelay');
@@ -89,6 +90,7 @@ let joinReply = null;       // server's answer to our join request
 let prizeOffered = false;   // server opened the prize screen this run
 let prizeClaimed = false;   // a prize was claimed this run
 const activeObjects = new Set();
+const seenObjects = new Set();   // every adventure object the server mentioned (qs/qas/qau)
 
 let currentRoom = null;
 let currentInternalRoomId = null;
@@ -200,6 +202,23 @@ function handleIncoming(message) {
   }
 
   // Answer to our join request: %xt%qj%<room>%<1 joined / 0 refused>%<reason or details>%...
+  // Adventure started: %xt%qs%<room>%<quest id>%...%<object>%<type>%...
+  // Some adventures (e.g. Bittersweets) start right away when you join and
+  // send this instead of a "qj" reply. It also lists the adventure's objects.
+  if (command === 'qs') {
+    if (!joinReply) joinReply = { ok: true, reason: '' };
+    for (const part of parts.slice(5)) {
+      if (/^[A-Za-z_][\w]*$/.test(part)) seenObjects.add(part);
+    }
+    return;
+  }
+
+  // Object updates, e.g. %xt%qas%-1%proto58%...  %xt%qau%-1%proto60%...
+  if ((command === 'qas' || command === 'qau') && parts[4]) {
+    seenObjects.add(parts[4]);
+    return;
+  }
+
   if (command === 'qj') {
     joinReply = { ok: parts[4] === '1', reason: parts[5] || '' };
     return;
@@ -227,7 +246,7 @@ function setupListeners() {
   let hooked = false;
 
   if (dispatch && typeof dispatch.onMessage === 'function') {
-    for (const message of ['qw', 'qcmd', 'qj', 'qpgift', 'il']) {
+    for (const message of ['qw', 'qcmd', 'qj', 'qs', 'qas', 'qau', 'qpgift', 'il']) {
       try {
         dispatch.onMessage({
           type: 'aj',
@@ -304,6 +323,11 @@ function makeContext(adventure) {
       if (adventure.afterStart) await adventure.afterStart(ctx);
     },
 
+    // Objects the server has mentioned (start list + live updates) matching a pattern.
+    objects(pattern) {
+      return [...seenObjects].filter(name => pattern.test(name));
+    },
+
     active(prefix) {
       return [...activeObjects].filter(name => name.startsWith(prefix));
     },
@@ -313,7 +337,9 @@ function makeContext(adventure) {
       if (!running) throw new Stopped();
     },
 
-    log
+    log,
+
+    status: setStatus
   };
 
   return ctx;
@@ -347,10 +373,17 @@ function readInt(input, fallback) {
   return Number.isNaN(value) || value < 0 ? fallback : value;
 }
 
-async function startRun() {
+async function startRun(here = false) {
   if (running || !selected) return;
 
   const adventure = selected;
+  if (here) return runHere(adventure);
+
+  if (!adventure.questId) {
+    setStatus(`${adventure.name} can't be joined by name yet. Go into it, then press Run here.`);
+    return;
+  }
+
   const host = hostDen();
 
   if (!host) {
@@ -402,6 +435,49 @@ async function startRun() {
     cancelSleep();
     setRunningUI(false);
     if (looping) setRunCounter(`${completed} run(s) done`);
+  }
+}
+
+// Runs the objectives in the adventure room you're already in (no joining,
+// no waiting for a host, no leaving).
+async function runHere(adventure) {
+  running = true;
+  setRunningUI(true);
+  activeObjects.clear();
+  renderSteps();
+
+  const ctx = makeContext(adventure);
+  let stepIndex = -1;
+  log('info', `Running ${adventure.name} in this room`);
+
+  try {
+    if (!(await refreshRoom())) throw new Error('No room yet - go into the adventure first.');
+
+    for (stepIndex = 0; stepIndex < adventure.steps.length; stepIndex++) {
+      const step = adventure.steps[stepIndex];
+      markStep(stepIndex, 'active');
+      setStatus(`${step.label}...`);
+      await step.run(ctx);
+      markStep(stepIndex, 'done');
+    }
+    stepIndex = -1;
+
+    setStatus(adventure.finishMessage || 'Done!');
+    log('ok', `${adventure.name} complete.`);
+  } catch (error) {
+    if (stepIndex >= 0) markStep(stepIndex, 'failed');
+    if (error instanceof Stopped) {
+      setStatus('Stopped.');
+      log('warn', 'Stopped.');
+    } else {
+      setStatus(`Error: ${error.message}`);
+      log('error', error.message);
+      console.error('[Adventures]', error);
+    }
+  } finally {
+    running = false;
+    cancelSleep();
+    setRunningUI(false);
   }
 }
 
@@ -465,6 +541,11 @@ const JOIN_ERRORS = {
   NLVL: 'Your level is too low for this adventure (or for hard mode).'
 };
 
+// Refusals that can clear up by themselves (retried when looping).
+const JOIN_NOTES = {
+  NP: 'There is no open game to join. Ask the host to open the adventure first.'
+};
+
 // Errors that won't fix themselves by retrying.
 const FATAL_JOIN_ERRORS = new Set(Object.keys(JOIN_ERRORS));
 
@@ -478,6 +559,7 @@ async function joinHost(ctx, adventure, host, isRejoin) {
       : `Waiting for ${host.name} to open a new game (try ${attempt})...`);
 
     joinReply = null;
+    seenObjects.clear();
     await ctx.send(`%xt%o%qj%{room}%${host.den}%${adventure.questId}%${hardFlag}%0%`, 0);
 
     const deadline = Date.now() + JOIN_REPLY_TIMEOUT;
@@ -491,7 +573,7 @@ async function joinHost(ctx, adventure, host, isRejoin) {
     const reason = joinReply ? joinReply.reason : '';
     const message = !joinReply
       ? 'No answer from the game to the join request.'
-      : JOIN_ERRORS[reason] || `Couldn't join ${host.name}'s game (reason: ${reason || 'unknown'}). Check they've opened a ${adventure.name} game in ${mode} mode and it isn't full or started.`;
+      : JOIN_ERRORS[reason] || JOIN_NOTES[reason] || `Couldn't join ${host.name}'s game (reason: ${reason || 'unknown'}). Check they've opened a ${adventure.name} game in ${mode} mode and it isn't full or started.`;
 
     if (FATAL_JOIN_ERRORS.has(reason) || Date.now() + REJOIN_RETRY_DELAY > retryUntil) {
       throw new Error(message);
@@ -638,6 +720,7 @@ function markStep(index, state) {
 
 function setRunningUI(isRunning) {
   startButton.disabled = isRunning || !selected;
+  if (hereButton) hereButton.disabled = isRunning || !selected;
   stopButton.disabled = !isRunning;
   for (const input of [hostInput, loopToggle, loopRunsInput, loopDelayInput, prizeChoice]) {
     if (input) input.disabled = isRunning;
@@ -659,6 +742,7 @@ function renderAll() {
 // ============================================================
 
 startButton.addEventListener('click', () => { startRun(); });
+if (hereButton) hereButton.addEventListener('click', () => { startRun(true); });
 if (hostInput) hostInput.addEventListener('keydown', event => { if (event.key === 'Enter') startRun(); });
 stopButton.addEventListener('click', () => { stopRun(); });
 

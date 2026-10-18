@@ -1,3 +1,7 @@
+> [!IMPORTANT]
+> **Jam Reborn has moved to [JR](https://github.com/BradysLabs/JR).** Jam Reborn is no longer supported and its last version (6.4.0) only points to JR.
+> Download JR from [the JR releases page](https://github.com/BradysLabs/JR/releases/latest) and join the [JR Discord](https://discord.gg/UvXzA2gK5W).
+
 <p align="center">
   <img src="assets/icon.png" alt="Jam Reborn" width="128">
 </p>
